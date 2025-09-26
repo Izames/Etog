@@ -52,6 +52,6 @@ CREATE TABLE IF NOT EXISTS event_archive (
     id SERIAL PRIMARY KEY,
     organizer INT,
     event INT,
-    FOREIGN KEY (organizer) REFERENCES account(int),
-    FOREIGN KEY (event) REFERENCES event(int)
+    FOREIGN KEY (organizer) REFERENCES account(id),
+    FOREIGN KEY (event) REFERENCES event(id)
 );

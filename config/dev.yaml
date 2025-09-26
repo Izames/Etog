@@ -1,1 +1,8 @@
 port: 8080
+db_conf:
+  host: "localhost"
+  user: "postgres"
+  password: "0"
+  dbname: "etog"
+  port: "5432"
+  sslmode: "disable"
