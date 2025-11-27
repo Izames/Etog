@@ -1,4 +1,4 @@
-port: 8080
+port: 8085
 db_conf:
   host: "localhost"
   user: "postgres"
@@ -6,3 +6,4 @@ db_conf:
   dbname: "etog"
   port: "5432"
   sslmode: "disable"
+env: "dev"
