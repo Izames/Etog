@@ -2,7 +2,7 @@ package psql
 
 import (
 	"Etog/internal/domain/entity"
-	"fmt"
+	"errors"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -19,7 +19,6 @@ func New(storagePath string) *Storage {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Sprintf("jdjd %s", "ss")
 	return &Storage{db: db}
 }
 
@@ -61,6 +60,31 @@ func (s *Storage) UpdateMockEvent(id int, newMockEvent map[string]interface{}) (
 func (s *Storage) DeleteMockEvent(id int) error {
 	result := s.db.Delete(&entity.MockEvent{}, id)
 	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *Storage) CreateRefreshToken(token entity.RefreshToken) error {
+	result := s.db.Create(&token)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *Storage) GetRefreshToken(tokenId string) (*entity.RefreshToken, error) {
+	var refreshToken entity.RefreshToken
+	result := s.db.Where("id = ?", tokenId).First(&refreshToken)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &refreshToken, nil
+}
+
+func (s *Storage) DeleteRefreshToken(userId int) error {
+	result := s.db.Where("user_id = ?", userId).Delete(&entity.RefreshToken{})
+	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return result.Error
 	}
 	return nil

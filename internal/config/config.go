@@ -7,9 +7,10 @@ import (
 )
 
 type Config struct {
-	Port string   `yaml:"port" env-default:"8080"`
-	Db   Database `yaml:"db_conf"`
-	Env  string   `yaml:"env"`
+	Port   string   `yaml:"port" env-default:"8080"`
+	Db     Database `yaml:"db_conf"`
+	Env    string   `yaml:"env"`
+	JWTKey string   `yaml:"jwt_key"`
 }
 
 type Database struct {

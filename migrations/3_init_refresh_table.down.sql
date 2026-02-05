@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS refresh;
+DROP INDEX IF EXISTS user_refresh;

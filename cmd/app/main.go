@@ -3,7 +3,7 @@ package main
 import (
 	"Etog/internal/config"
 	"Etog/internal/http-server/handlers"
-	"Etog/internal/lib/slog/handler"
+	slog2 "Etog/internal/lib/slog"
 	"Etog/storage/psql"
 	"context"
 	"flag"
@@ -93,5 +93,5 @@ func NewLogger(env string) *slog.Logger {
 	case "prod":
 		level = slog.LevelInfo
 	}
-	return slog.New(handler.NewHandler(level))
+	return slog.New(slog2.NewHandler(level))
 }
