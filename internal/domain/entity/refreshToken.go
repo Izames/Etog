@@ -7,3 +7,7 @@ type RefreshToken struct {
 	UserId   int       `gorm:"column:user_id"`
 	ExpireAt time.Time `gorm:"column:expire_at"`
 }
+
+func (RefreshToken) TableName() string {
+	return "refresh"
+}
