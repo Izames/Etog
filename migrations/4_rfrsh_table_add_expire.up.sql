@@ -1,0 +1,1 @@
+ALTER TABLE refresh ADD COLUMN expire_at TIME NOT NULL;

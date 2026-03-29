@@ -3,6 +3,7 @@ package services
 import (
 	"Etog/internal/config"
 	"Etog/internal/domain/entity"
+	"context"
 	"fmt"
 	"time"
 
@@ -12,23 +13,41 @@ import (
 )
 
 type AuthService struct {
-	Storage Storage
-	Conf    config.Config
+	Storage  Storage
+	RStorage RStorage
+	Conf     config.Config
 }
 
 type Storage interface {
 	CreateRefreshToken(token entity.RefreshToken) error
 	GetRefreshToken(tokenId string) (*entity.RefreshToken, error)
 	DeleteRefreshToken(userId int) error
+	CreateAccount(account entity.Account) error
+	GetAccountByEmail(email string) (*entity.Account, error)
+	PutAccount(account entity.Account) error
+	GetAccountByLogin(login string) (*entity.Account, error)
 }
 
-func (a *AuthService) CreateAccessToken(userId int, config config.Config) (string, error) {
+type RStorage interface {
+	Put(ctx context.Context, key string, value interface{}, exp time.Duration) error
+	Get(ctx context.Context, key string) (interface{}, error)
+}
+
+func NewAuthService(storage Storage, conf config.Config, rStorage RStorage) *AuthService {
+	return &AuthService{
+		Storage:  storage,
+		Conf:     conf,
+		RStorage: rStorage,
+	}
+}
+
+func (a *AuthService) CreateAccessToken(userId int) (string, error) {
 	claims := jwt.MapClaims{
 		"exp": time.Now().Add(time.Hour).Unix(),
 		"sub": userId,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.JWTKey))
+	tokenString, err := token.SignedString([]byte(a.Conf.JWTKey))
 	if err != nil {
 		return "", err
 	}
@@ -132,4 +151,40 @@ func (a *AuthService) DeleteRefreshToken(userId int) error {
 		return err
 	}
 	return nil
+}
+
+func (a *AuthService) TokensGenerate(userId int) (string, string, error) {
+	token, err := a.CreateAccessToken(userId)
+	if err != nil {
+		return "", "", err
+	}
+	refreshToken, err := a.CreateRefreshToken(userId, a.Conf)
+	if err != nil {
+		return "", "", err
+	}
+
+	return token, refreshToken, nil
+}
+
+func (a *AuthService) CreateAccount(account entity.Account) error {
+	return a.Storage.CreateAccount(account)
+}
+
+func (a *AuthService) GetAccountByEmail(email string) (*entity.Account, error) {
+	return a.Storage.GetAccountByEmail(email)
+}
+
+func (a *AuthService) Put(ctx context.Context, key string, value interface{}, exp time.Duration) error {
+	return a.RStorage.Put(ctx, key, value, exp)
+}
+func (a *AuthService) Get(ctx context.Context, key string) (interface{}, error) {
+	return a.RStorage.Get(ctx, key)
+}
+
+func (a *AuthService) PutAccount(account entity.Account) error {
+	return a.Storage.PutAccount(account)
+}
+
+func (a *AuthService) GetAccountByLogin(login string) (*entity.Account, error) {
+	return a.Storage.GetAccountByLogin(login)
 }

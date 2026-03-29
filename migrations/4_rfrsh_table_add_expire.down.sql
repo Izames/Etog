@@ -1,0 +1,1 @@
+ALTER TABLE refresh ALTER COLUMN expire_at DROP NOT NULL;

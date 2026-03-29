@@ -3,8 +3,11 @@ package main
 import (
 	"Etog/internal/config"
 	"Etog/internal/http-server/handlers"
+	"Etog/internal/http-server/services"
 	slog2 "Etog/internal/lib/slog"
+	"Etog/internal/worker"
 	"Etog/storage/psql"
+	"Etog/storage/redis"
 	"context"
 	"flag"
 	"fmt"
@@ -25,15 +28,18 @@ func main() {
 	flag.Parse()
 	conf := config.MustLoad()
 	log := NewLogger(conf.Env)
-	log.Info("sss")
 	database := psql.New(fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		conf.Db.User,
 		conf.Db.Pass,
 		conf.Db.Host,
 		conf.Db.Port,
 		conf.Db.Dbname,
-		conf.Db.Sslmode))
+		conf.Db.Sslmode), log)
+	redisDb := redis.NewRedisDb(conf.RedisDb, log)
+	authService := services.NewAuthService(database, conf, redisDb)
+	accountHandler := handlers.NewAccountHandler(log, authService)
 	mockHandler := handlers.NewMockEventHandler(log, database)
+
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -46,11 +52,15 @@ func main() {
 	}))
 
 	rMockEv := router.Group("/event")
+	rAccount := router.Group("/account")
+
 	rMockEv.POST("/add", mockHandler.CreateMockEvent)
 	rMockEv.GET("/get/:id", mockHandler.GetMockEvent)
 	rMockEv.GET("/get", mockHandler.GetMockEvents)
 	rMockEv.PATCH("/update/:id", mockHandler.UpdateMockEvent)
 	rMockEv.DELETE("/delete/:id", mockHandler.DeleteMockEvent)
+
+	rAccount.POST("/register", accountHandler.Registration)
 
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%s", conf.Port),
@@ -66,12 +76,18 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
-	<-quit
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	cleaner := worker.NewCleaner(database.ReturnDb(), log)
+	cleaner.Run(ctx)
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Error("error server closing:", err)
 	} else {
 		log.Info("Server gracefully shutdown")
@@ -93,5 +109,7 @@ func NewLogger(env string) *slog.Logger {
 	case "prod":
 		level = slog.LevelInfo
 	}
-	return slog.New(slog2.NewHandler(level))
+	log := slog.New(slog2.NewHandler(level))
+	log.Info("Logger initialized successfully\n")
+	return log
 }

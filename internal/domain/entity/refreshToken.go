@@ -1,6 +1,9 @@
 package entity
 
+import "time"
+
 type RefreshToken struct {
-	TokenId []byte `gorm:"primary_key; column:token_id;"`
-	UserId  int    `gorm:"column:user_id"`
+	TokenId  []byte    `gorm:"primary_key; column:token_id;"`
+	UserId   int       `gorm:"column:user_id"`
+	ExpireAt time.Time `gorm:"column:expire_at"`
 }

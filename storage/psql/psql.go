@@ -2,7 +2,9 @@ package psql
 
 import (
 	"Etog/internal/domain/entity"
+	"Etog/storage"
 	"errors"
+	"log/slog"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -14,12 +16,17 @@ type Storage struct {
 
 // сделать систему ошибок для определения проблем с базой данных, или просто не удалось найти
 
-func New(storagePath string) *Storage {
+func New(storagePath string, log *slog.Logger) *Storage {
 	db, err := gorm.Open(postgres.Open(storagePath), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
+	log.Info("PostgreSQL run successfully\n")
 	return &Storage{db: db}
+}
+
+func (s *Storage) ReturnDb() *gorm.DB {
+	return s.db
 }
 
 func (s *Storage) CreateMockEvent(mockEvent entity.MockEvent) error {
@@ -59,6 +66,61 @@ func (s *Storage) UpdateMockEvent(id int, newMockEvent map[string]interface{}) (
 
 func (s *Storage) DeleteMockEvent(id int) error {
 	result := s.db.Delete(&entity.MockEvent{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *Storage) CreateAccount(account entity.Account) error {
+	result := s.db.Create(&account)
+	if result.Error != nil {
+		if errors.Is(gorm.ErrDuplicatedKey, result.Error) {
+			return storage.ErrNotFound
+		}
+		return result.Error
+	}
+	return nil
+}
+
+func (s *Storage) GetAccount(id int) (*entity.Account, error) {
+	var account entity.Account
+	result := s.db.Where("id = ?", id).First(&account)
+	if result.Error != nil {
+		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
+			return nil, storage.ErrNotFound
+		}
+		return nil, result.Error
+	}
+	return &account, nil
+}
+
+func (s *Storage) GetAccountByLogin(login string) (*entity.Account, error) {
+	var account entity.Account
+	result := s.db.Where("login = ?", login).First(&account)
+	if result.Error != nil {
+		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
+			return nil, storage.ErrNotFound
+		}
+		return nil, result.Error
+	}
+	return &account, nil
+}
+
+func (s *Storage) GetAccountByEmail(email string) (*entity.Account, error) {
+	var account entity.Account
+	result := s.db.Where("email = ?", email).First(&account)
+	if result.Error != nil {
+		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
+			return nil, storage.ErrNotFound
+		}
+		return nil, result.Error
+	}
+	return &account, nil
+}
+
+func (s *Storage) PutAccount(account entity.Account) error {
+	result := s.db.Save(&account)
 	if result.Error != nil {
 		return result.Error
 	}

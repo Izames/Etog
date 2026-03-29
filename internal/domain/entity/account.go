@@ -1,7 +1,7 @@
 package entity
 
 type Account struct {
-	Id          string `gorm:"primary_key;column:id"`
+	Id          int    `gorm:"primary_key;column:id"`
 	Mail        string `gorm:"column:mail"`
 	Login       string `gorm:"column:login"`
 	Password    string `gorm:"column:password"`
@@ -10,4 +10,9 @@ type Account struct {
 	Description string `gorm:"column:description"`
 	Rating      int    `gorm:"column:rating"`
 	Deleted     bool   `gorm:"column:deleted"`
+	Active      bool   `gorm:"column:active"`
+}
+
+func (Account) TableName() string {
+	return "account"
 }
