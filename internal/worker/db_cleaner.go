@@ -21,7 +21,7 @@ func NewCleaner(db *gorm.DB, slog *slog.Logger) *Cleaner {
 
 func (cleaner *Cleaner) Run(ctx context.Context) {
 	cleaner.slog.Info("Cleaner started successfully\n")
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(24 * time.Hour)
 	go func() {
 		defer ticker.Stop()
 		for {
@@ -30,7 +30,6 @@ func (cleaner *Cleaner) Run(ctx context.Context) {
 				cleaner.slog.Info("Cleaner shutting down successfully\n")
 				return
 			case <-ticker.C:
-				result := cleaner.db.Where("token_id IN (?)",
 					cleaner.db.Model(&entity.RefreshToken{}).
 						Select("token_id").
 						Where("expire_at < ?", time.Now()).

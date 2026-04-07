@@ -92,7 +92,7 @@ func main() {
 	} else {
 		log.Info("Server gracefully shutdown")
 	}
-
+	//
 	//TODO: Сделать документацию для конфига
 	//TODO: сделать обращения к базе данных
 	//TODO: создать запросы для апи
