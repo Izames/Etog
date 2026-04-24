@@ -12,12 +12,15 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type redisDb struct {
+type RedisDb struct {
 	rdb  *redis.Client
 	slog *slog.Logger
 }
 
-func NewRedisDb(config config.RedisDb, slog *slog.Logger) *redisDb {
+func NewRedisDb(config config.RedisDb, log *slog.Logger) *RedisDb {
+	if log == nil {
+		log = slog.Default()
+	}
 	index, err := strconv.Atoi(config.Index)
 	if err != nil {
 		panic(err)
@@ -32,17 +35,17 @@ func NewRedisDb(config config.RedisDb, slog *slog.Logger) *redisDb {
 		panic(err)
 	}
 	slog.Info("Redis db was created successfully\n")
-	return &redisDb{rdb: db, slog: slog}
+	return &RedisDb{rdb: db, slog: log}
 }
 
-func (rd *redisDb) Put(ctx context.Context, key string, value interface{}, exp time.Duration) error {
+func (rd *RedisDb) Put(ctx context.Context, key string, value interface{}, exp time.Duration) error {
 	if err := rd.rdb.Set(ctx, key, value, exp).Err(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (rd *redisDb) Get(ctx context.Context, key string) (interface{}, error) {
+func (rd *RedisDb) Get(ctx context.Context, key string) (interface{}, error) {
 	value, err := rd.rdb.Get(ctx, key).Result()
 
 	if errors.Is(err, redis.Nil) {

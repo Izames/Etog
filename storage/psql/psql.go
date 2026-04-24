@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -17,6 +18,9 @@ type Storage struct {
 // сделать систему ошибок для определения проблем с базой данных, или просто не удалось найти
 
 func New(storagePath string, log *slog.Logger) *Storage {
+	if log == nil {
+		log = slog.Default()
+	}
 	db, err := gorm.Open(postgres.Open(storagePath), &gorm.Config{})
 	if err != nil {
 		panic(err)
@@ -75,8 +79,11 @@ func (s *Storage) DeleteMockEvent(id int) error {
 func (s *Storage) CreateAccount(account entity.Account) error {
 	result := s.db.Create(&account)
 	if result.Error != nil {
-		if errors.Is(gorm.ErrDuplicatedKey, result.Error) {
-			return storage.ErrNotFound
+		var pgErr *pgconn.PgError
+		if errors.As(result.Error, &pgErr) {
+			if pgErr.Code == "23505" {
+				return storage.ErrAlreadyExists
+			}
 		}
 		return result.Error
 	}
