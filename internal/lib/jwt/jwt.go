@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"Etog/internal/domain/entity"
+	"Etog/storage/psql"
 	"fmt"
 	"time"
 
@@ -11,10 +12,12 @@ import (
 )
 
 type Jwt struct {
+	JwtKey  string
+	Storage *psql.Storage
 }
 
-func newJwtLib() *Jwt {
-	return &Jwt{}
+func NewJwtLib(JwtKey string, storage *psql.Storage) *Jwt {
+	return &Jwt{JwtKey: JwtKey, Storage: storage}
 }
 
 func (j *Jwt) CreateAccessToken(userId int) (string, error) {
@@ -23,119 +26,137 @@ func (j *Jwt) CreateAccessToken(userId int) (string, error) {
 		"sub": userId,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(a.Conf.JWTKey))
+
+	tokenString, err := token.SignedString([]byte(j.JwtKey))
 	if err != nil {
 		return "", err
 	}
 	return tokenString, nil
 }
 
-func (j *Jwt) CreateRefreshToken(userId int, config config.Config) (string, error) {
+func (j *Jwt) CreateRefreshToken(userId int) (string, error) {
 	GenTokenID := uuid.New().String()
+
 	tokenID, err := bcrypt.GenerateFromPassword([]byte(GenTokenID), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
 	}
+
 	refreshClaims := jwt.MapClaims{
 		"exp": time.Now().Add(24 * 365 * time.Hour).Unix(),
 		"sub": userId,
-		"jti": tokenID,
+		"jti": string(tokenID),
 		"typ": "refresh",
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshTokenString, err := refreshToken.SignedString([]byte(config.JWTKey))
+
+	refreshTokenString, err := refreshToken.SignedString([]byte(j.JwtKey))
 	if err != nil {
 		return "", err
 	}
-
-	return tokenID
-	if err = a.Storage.CreateRefreshToken(entity.RefreshToken{
-		TokenId: tokenID,
-		UserId:  userId,
-	}); err != nil {
-		return "", err
-	}
+	err = j.Storage.CreateRefreshToken(entity.RefreshToken{
+		UserId:   userId,
+		TokenId:  tokenID,
+		ExpireAt: time.Now().Add(time.Hour * 24 * 365),
+	})
 
 	return refreshTokenString, nil
 }
 
-func (a *AuthService) CheckAccessToken(tokenString string) error {
-	keyFunc := func() jwt.Keyfunc {
-		return func(_ *jwt.Token) (interface{}, error) {
-			return a.Conf.JWTKey, nil
-		}
+func (j *Jwt) CheckAccessToken(tokenString string) error {
+	keyFunc := func(_ *jwt.Token) (interface{}, error) {
+		return []byte(j.JwtKey), nil
 	}
-	token, err := jwt.Parse(tokenString, keyFunc())
+
+	token, err := jwt.Parse(tokenString, keyFunc)
 	if err != nil {
 		return err
 	}
+
 	if !token.Valid {
 		return fmt.Errorf("invalid token")
 	}
+
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return fmt.Errorf("invalid token")
 	}
-	exp, ok := claims["exp"].(int64)
+
+	expFloat, ok := claims["exp"].(float64)
 	if !ok {
 		return fmt.Errorf("invalid token")
 	}
+
+	exp := int64(expFloat)
+
 	if time.Now().After(time.Unix(exp, 0)) {
 		return fmt.Errorf("invalid token")
 	}
+
 	return nil
 }
 
-func (a *AuthService) RefreshToken(refreshTokenString string) error {
-	keyFunc := func() jwt.Keyfunc {
-		return func(_ *jwt.Token) (interface{}, error) {
-			return a.Conf.JWTKey, nil
-		}
+// return new access token
+func (j *Jwt) RefreshToken(refreshTokenString string) (error, string) {
+	keyFunc := func(_ *jwt.Token) (interface{}, error) {
+		return []byte(j.JwtKey), nil
 	}
-	token, err := jwt.Parse(refreshTokenString, keyFunc(), jwt.WithExpirationRequired())
+
+	token, err := jwt.Parse(refreshTokenString, keyFunc, jwt.WithExpirationRequired())
 	if err != nil {
-		return err
+		return err, ""
 	}
+
 	if !token.Valid {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
+
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
-	exp, ok := claims["exp"].(int64)
+
+	expFloat, ok := claims["exp"].(float64)
 	if !ok {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
+
+	exp := int64(expFloat)
+
 	if time.Now().After(time.Unix(exp, 0)) {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
+
 	tokenId, ok := claims["jti"].(string)
 	if !ok {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
-	_, err = a.Storage.GetRefreshToken(tokenId)
+
+	_, err = j.Storage.GetRefreshToken(tokenId)
 	if err != nil {
-		return fmt.Errorf("invalid refresh token")
+		return fmt.Errorf("invalid refresh token"), ""
 	}
-	return nil
+	newToken, err := j.CreateAccessToken(int(claims["sub"].(float64)))
+
+	return nil, newToken
 }
 
-func (a *AuthService) DeleteRefreshToken(userId int) error {
-	err := a.Storage.DeleteRefreshToken(userId)
+func (j *Jwt) DeleteRefreshToken(userId int) error {
+	err := j.Storage.DeleteRefreshToken(userId)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (a *AuthService) TokensGenerate(userId int) (string, string, error) {
-	token, err := a.CreateAccessToken(userId)
+func (j *Jwt) TokensGenerate(userId int) (string, string, error) {
+	token, err := j.CreateAccessToken(userId)
 	if err != nil {
 		return "", "", err
 	}
-	refreshToken, err := a.CreateRefreshToken(userId, *a.Conf)
+
+	refreshToken, err := j.CreateRefreshToken(userId)
 	if err != nil {
 		return "", "", err
 	}

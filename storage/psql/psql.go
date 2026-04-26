@@ -116,7 +116,7 @@ func (s *Storage) GetAccountByLogin(login string) (*entity.Account, error) {
 
 func (s *Storage) GetAccountByEmail(email string) (*entity.Account, error) {
 	var account entity.Account
-	result := s.db.Where("email = ?", email).First(&account)
+	result := s.db.Where("mail = ?", email).First(&account)
 	if result.Error != nil {
 		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
 			return nil, storage.ErrNotFound
@@ -144,7 +144,7 @@ func (s *Storage) CreateRefreshToken(token entity.RefreshToken) error {
 
 func (s *Storage) GetRefreshToken(tokenId string) (*entity.RefreshToken, error) {
 	var refreshToken entity.RefreshToken
-	result := s.db.Where("id = ?", tokenId).First(&refreshToken)
+	result := s.db.Where("token_id = ?", tokenId).First(&refreshToken)
 	if result.Error != nil {
 		return nil, result.Error
 	}

@@ -1,13 +1,22 @@
 package services
 
 import (
+	"Etog/internal/config"
 	"Etog/internal/domain/entity"
+	"Etog/internal/domain/entity/DTO"
+	"Etog/internal/lib/jwt"
+	mail2 "Etog/internal/lib/mail"
 	"Etog/storage"
 	"Etog/storage/psql"
 	"Etog/storage/redis"
+	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/mail"
+	"strconv"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -16,9 +25,11 @@ type AuthService struct {
 	Storage  *psql.Storage
 	RStorage *redis.RedisDb
 	log      *slog.Logger
+	MailConf *config.MailData
+	Jwt      *jwt.Jwt
 }
 
-func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Logger) *AuthService {
+func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Logger, mailConf *config.MailData, jwt *jwt.Jwt) *AuthService {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -26,6 +37,8 @@ func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Lo
 		Storage:  storage,
 		RStorage: rStorage,
 		log:      log,
+		MailConf: mailConf,
+		Jwt:      jwt,
 	}
 }
 
@@ -68,6 +81,72 @@ func (a *AuthService) Registration(account *entity.Account) (error, int) {
 		}
 	}
 	return nil, 200
+}
+
+func (a *AuthService) SendCode(ctx context.Context, email string) (error, int) {
+	const op = "services.SendCode"
+	log := a.log.With(slog.String("op", op))
+	code, err := a.RStorage.Get(ctx, email)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			code1 := rand.Intn(10)
+			code2 := rand.Intn(10)
+			code3 := rand.Intn(10)
+			code4 := rand.Intn(10)
+			code5 := rand.Intn(10)
+			code6 := rand.Intn(10)
+			code = strconv.Itoa(code1) + strconv.Itoa(code2) + strconv.Itoa(code3) + strconv.Itoa(code4) + strconv.Itoa(code5) + strconv.Itoa(code6)
+		} else {
+			log.Error("Error getting code: " + err.Error())
+			return errors.New("internal server error"), 500
+		}
+	}
+	err = mail2.SendMail(*a.MailConf, email, fmt.Sprintf("ваш код для подтверждения почты: %s", code), "confirmation code")
+	if err != nil {
+		log.Error("Error sending code: " + err.Error())
+		return errors.New("internal server error"), 500
+	}
+	err = a.RStorage.Put(ctx, email, code, time.Minute*5)
+	if err != nil {
+		log.Error("Error putting code: " + err.Error())
+		return errors.New("internal server error"), 500
+	}
+
+	return nil, 200
+
+}
+
+func (a *AuthService) ConfirmCode(ctx context.Context, request DTO.ConfirmCodeRequest) (error, int, string, string) {
+	const op = "services.ConfirmCode"
+	log := a.log.With(slog.String("op", op))
+
+	codeToCheck, err := a.RStorage.Get(ctx, request.Email)
+	if err != nil {
+		log.Error("Error getting code: " + err.Error())
+		return errors.New("internal server error"), 500, "", ""
+	}
+	if codeToCheck != request.Code {
+		return errors.New("invalid code"), 400, "", ""
+	}
+	account, err := a.Storage.GetAccountByEmail(request.Email)
+	if err != nil {
+		log.Error("Error getting account: " + err.Error())
+		return errors.New("internal server error"), 500, "", ""
+	}
+	account.Active = true
+	err = a.Storage.PutAccount(*account)
+	if err != nil {
+		log.Error("Error putting account: " + err.Error())
+		return errors.New("internal server error"), 500, "", ""
+	}
+
+	token, refreshToken, err := a.Jwt.TokensGenerate(account.Id)
+	if err != nil {
+		log.Error("Error generating token: " + err.Error())
+		return errors.New("internal server error"), 500, "", ""
+	}
+	_ = a.RStorage.Delete(ctx, request.Email)
+	return nil, 200, token, refreshToken
 }
 
 //func (a *AuthService) GetAccountByEmail(email string) (*entity.Account, error) {

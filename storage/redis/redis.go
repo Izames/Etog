@@ -56,3 +56,10 @@ func (rd *RedisDb) Get(ctx context.Context, key string) (interface{}, error) {
 
 	return value, nil
 }
+
+func (rd *RedisDb) Delete(ctx context.Context, key string) error {
+	if err := rd.rdb.Del(ctx, key).Err(); err != nil {
+		return err
+	}
+	return nil
+}
