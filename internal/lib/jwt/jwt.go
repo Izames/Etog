@@ -36,7 +36,10 @@ func (j *Jwt) CreateAccessToken(userId int) (string, error) {
 
 func (j *Jwt) CreateRefreshToken(userId int) (string, error) {
 	GenTokenID := uuid.New().String()
-
+	err := j.DeleteRefreshToken(userId)
+	if err != nil {
+		return "", err
+	}
 	tokenID, err := bcrypt.GenerateFromPassword([]byte(GenTokenID), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
@@ -61,7 +64,7 @@ func (j *Jwt) CreateRefreshToken(userId int) (string, error) {
 		ExpireAt: time.Now().Add(time.Hour * 24 * 365),
 	})
 
-	return refreshTokenString, nil
+	return refreshTokenString, err
 }
 
 func (j *Jwt) CheckAccessToken(tokenString string) error {
