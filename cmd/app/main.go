@@ -4,6 +4,7 @@ import (
 	"Etog/internal/config"
 	"Etog/internal/http-server/handlers"
 	"Etog/internal/http-server/services"
+	jwt2 "Etog/internal/lib/jwt"
 	slog2 "Etog/internal/lib/slog"
 	"Etog/internal/worker"
 	"Etog/storage/psql"
@@ -36,7 +37,8 @@ func main() {
 		conf.Db.Dbname,
 		conf.Db.Sslmode), log)
 	redisDb := redis.NewRedisDb(conf.RedisDb, log)
-	authService := services.NewAuthService(database, conf, redisDb)
+	jwt := jwt2.NewJwtLib(conf.JWTKey, database)
+	authService := services.NewAuthService(database, redisDb, log, &conf.MailData, jwt)
 	accountHandler := handlers.NewAccountHandler(log, authService)
 	mockHandler := handlers.NewMockEventHandler(log, database)
 

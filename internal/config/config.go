@@ -18,7 +18,7 @@ type Config struct {
 type Database struct {
 	Host    string `yaml:"host" env-required:"true"`
 	User    string `yaml:"user" env-required:"true"`
-	Pass    string `yaml:"password" env-required:"true"`
+	Pass    string `yaml:"pass" env-required:"true"`
 	Dbname  string `yaml:"dbname" env-required:"true"`
 	Port    string `yaml:"port" env-default:"5432"`
 	Sslmode string `yaml:"sslmode" env-required:"true"`
