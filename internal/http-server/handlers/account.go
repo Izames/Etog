@@ -81,46 +81,22 @@ func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
 
 }
 
-//func (a *AccountHandler) Authenticate(ctx *gin.Context) {
-//	var DTOAccount DTO.AuthRequest
-//	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
-//		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-//		return
-//	}
-//
-//	account, err := a.service.GetAccountByLogin(DTOAccount.Login)
-//	if err != nil {
-//		if errors.Is(err, storage.ErrNotFound) {
-//			ctx.JSON(400, gin.H{
-//				"error": "Account not found",
-//			})
-//			return
-//		}
-//		ctx.JSON(500, gin.H{"error": "Internal server error"})
-//	}
-//
-//	if err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(DTOAccount.Password)); err != nil {
-//		ctx.JSON(400, gin.H{
-//			"error": "Password is incorrect",
-//		})
-//		return
-//	}
-//	if !account.Active {
-//		ctx.JSON(401, gin.H{
-//			"error": "Email not checked",
-//		})
-//		return
-//	}
-//	token, refreshToken, err := a.service.TokensGenerate(account.Id)
-//	if err != nil {
-//		ctx.JSON(500, gin.H{"error": "Internal server error"})
-//		return
-//	}
-//	ctx.JSON(200, gin.H{
-//		"token":         token,
-//		"refresh_token": refreshToken,
-//	})
-//}
+func (a *AccountHandler) Authenticate(ctx *gin.Context) {
+	var DTOAccount DTO.AuthRequest
+	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+	token, refreshToken, err, code := a.service.Authenticate(DTOAccount)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{
+		"token":         token,
+		"refresh_token": refreshToken,
+	})
+}
 
 //сделать изменения аккаунта с аватаркой
 //сделать удаление аккаунта

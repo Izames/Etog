@@ -14,6 +14,7 @@ import (
 
 	jwt3 "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func setup() (*AuthService, *psql.Storage, *redis.RedisDb) {
@@ -196,5 +197,122 @@ func TestAuthService_SendCode_And_Confirm(t *testing.T) {
 
 	if tokenID == "" {
 		t.Fatal("empty token id")
+	}
+}
+
+func TestAuthService_Authenticate_Success(t *testing.T) {
+	a, db, _ := setup()
+	mail := uuid.New().String() + "@mail.ru"
+	login := uuid.New().String() + "izameses"
+	password := "password123"
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	account := entity.Account{
+		Mail:     mail,
+		Login:    login,
+		Password: string(hash),
+		Active:   true,
+	}
+
+	if err := db.PutAccount(account); err != nil {
+		t.Fatal(err)
+	}
+
+	token, refresh, err, code := a.Authenticate(DTO.AuthRequest{
+		Login:    login,
+		Password: password,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if code != 200 {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if token == "" || refresh == "" {
+		t.Fatal("tokens should not be empty")
+	}
+}
+
+func TestAuthService_Authenticate_NotFound(t *testing.T) {
+	a, _, _ := setup()
+
+	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+		Login:    "no_user",
+		Password: "1234",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if code != 404 {
+		t.Fatalf("expected 404, got %d", code)
+	}
+}
+
+func TestAuthService_Authenticate_WrongPassword(t *testing.T) {
+	a, db, _ := setup()
+
+	mail := uuid.New().String() + "@mail.ru"
+	login := uuid.New().String() + "user1"
+	password := "1234"
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	account := entity.Account{
+		Mail:     mail,
+		Login:    login,
+		Password: string(hash),
+		Active:   true,
+	}
+
+	if err := db.PutAccount(account); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+		Login:    login,
+		Password: "wrong",
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if code != 400 {
+		t.Fatalf("expected 400, got %d", code)
+	}
+}
+
+func TestAuthService_Authenticate_NotActive(t *testing.T) {
+	a, db, _ := setup()
+
+	mail := uuid.New().String() + "@mail.ru"
+	login := uuid.New().String() + "user2"
+	password := "1234"
+
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	account := entity.Account{
+		Mail:     mail,
+		Login:    login,
+		Password: string(hash),
+		Active:   false,
+	}
+
+	if err := db.PutAccount(account); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+		Login:    login,
+		Password: password,
+	})
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if code != 401 {
+		t.Fatalf("expected 401, got %d", code)
 	}
 }

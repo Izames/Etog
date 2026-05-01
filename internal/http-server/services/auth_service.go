@@ -149,21 +149,24 @@ func (a *AuthService) ConfirmCode(ctx context.Context, request DTO.ConfirmCodeRe
 	return nil, 200, token, refreshToken
 }
 
-//func (a *AuthService) GetAccountByEmail(email string) (*entity.Account, error) {
-//	return a.Storage.GetAccountByEmail(email)
-//}
-//
-//func (a *AuthService) Put(ctx context.Context, key string, value interface{}, exp time.Duration) error {
-//	return a.RStorage.Put(ctx, key, value, exp)
-//}
-//func (a *AuthService) Get(ctx context.Context, key string) (interface{}, error) {
-//	return a.RStorage.Get(ctx, key)
-//}
-//
-//func (a *AuthService) PutAccount(account entity.Account) error {
-//	return a.Storage.PutAccount(account)
-//}
-//
-//func (a *AuthService) GetAccountByLogin(login string) (*entity.Account, error) {
-//	return a.Storage.GetAccountByLogin(login)
-//}
+func (a *AuthService) Authenticate(auth DTO.AuthRequest) (string, string, error, int) {
+	account, err := a.Storage.GetAccountByLogin(auth.Login)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return "", "", errors.New("account not found"), 404
+		}
+		return "", "", errors.New("internal server error"), 500
+	}
+
+	if err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(auth.Password)); err != nil {
+		return "", "", errors.New("password incorrect"), 400
+	}
+	if !account.Active {
+		return "", "", errors.New("email is not active"), 401
+	}
+	token, refreshToken, err := a.Jwt.TokensGenerate(account.Id)
+	if err != nil {
+		return "", "", err, 500
+	}
+	return token, refreshToken, nil, 200
+}
