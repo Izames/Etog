@@ -63,6 +63,11 @@ func main() {
 	rMockEv.DELETE("/delete/:id", mockHandler.DeleteMockEvent)
 
 	rAccount.POST("/register", accountHandler.Registration)
+	rAccount.POST("/auth", accountHandler.Authenticate)
+	rAccount.POST("/sendCode", accountHandler.GetCode)
+	rAccount.POST("/confirmCode", accountHandler.ConfirmCode)
+
+	rAccount.Use()
 
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%s", conf.Port),

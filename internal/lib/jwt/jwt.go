@@ -4,8 +4,11 @@ import (
 	"Etog/internal/domain/entity"
 	"Etog/storage/psql"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -165,4 +168,53 @@ func (j *Jwt) TokensGenerate(userId int) (string, string, error) {
 	}
 
 	return token, refreshToken, nil
+}
+
+func (j *Jwt) JWTAuth() gin.HandlerFunc {
+	return func(context *gin.Context) {
+		authHeader := context.GetHeader("Authorization")
+		if authHeader == "" {
+			context.JSON(http.StatusUnauthorized, gin.H{"error": "Token is required"})
+			context.Abort()
+			return
+		}
+
+		tokenString := strings.Split(authHeader, " ")[1]
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
+			}
+			return j.JwtKey, nil
+		})
+		if err != nil {
+			context.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			context.Abort()
+			return
+		}
+		if !token.Valid {
+			context.JSON(http.StatusUnauthorized, gin.H{"error": "Token is invalid"})
+			context.Abort()
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			context.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			context.Abort()
+			return
+		}
+
+		userIdF := claims["sub"].(float64)
+		userId := int(userIdF)
+		if userId == 0 {
+			context.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			context.Abort()
+			return
+		}
+
+		context.Set("userId", userId)
+
+		context.Next()
+	}
 }

@@ -9,11 +9,13 @@ import (
 	"Etog/storage"
 	"Etog/storage/psql"
 	"Etog/storage/redis"
+	"Etog/storage/s3"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"mime/multipart"
 	"net/mail"
 	"strconv"
 	"time"
@@ -27,6 +29,7 @@ type AuthService struct {
 	log      *slog.Logger
 	MailConf *config.MailData
 	Jwt      *jwt.Jwt
+	S3       *s3.S3
 }
 
 func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Logger, mailConf *config.MailData, jwt *jwt.Jwt) *AuthService {
@@ -169,4 +172,31 @@ func (a *AuthService) Authenticate(auth DTO.AuthRequest) (string, string, error,
 		return "", "", err, 500
 	}
 	return token, refreshToken, nil, 200
+}
+
+func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Context, fileHeader *multipart.FileHeader) (interface{}, interface{}) {
+	UserId := ctx.Value("UserId").(int)
+
+	accountDb, err := a.Storage.GetAccount(UserId)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			a.log.Error("Account not found")
+			return errors.New("account not found"), 404
+		}
+		a.log.Error("Error getting account: " + err.Error())
+		return errors.New("internal server error"), 500
+	}
+
+	url, err := a.S3.Upload(fileHeader, "user-avatar/")
+
+	if err != nil {
+		a.log.Error("Error uploading file: " + err.Error())
+		return errors.New("internal server error"), 500
+	}
+
+	accountDb.Avatar = url
+
+	accountDb.Description = account.Description
+
+	return accountDb, account
 }

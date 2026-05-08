@@ -13,6 +13,7 @@ type Config struct {
 	JWTKey   string   `yaml:"jwt_key"`
 	MailData MailData `yaml:"mail_data"`
 	RedisDb  RedisDb  `yaml:"redis_db"`
+	S3       S3       `yaml:"s3_conf"`
 }
 
 type Database struct {
@@ -37,6 +38,14 @@ type RedisDb struct {
 	Password string `yaml:"password" env-required:"true"`
 	User     string `yaml:"user" env-required:"true"`
 	Index    string `yaml:"index" env-required:"true"`
+}
+
+type S3 struct {
+	Endpoint string `yaml:"endpoint" env-required:"true"`
+	Region   string `yaml:"region" env-required:"true"`
+	Bucket   string `yaml:"bucket" env-required:"true"`
+	Access   string `yaml:"access" env-required:"true"`
+	Secret   string `yaml:"secret" env-required:"true"`
 }
 
 func MustLoad() Config {

@@ -6,6 +6,7 @@ import (
 	"Etog/internal/domain/entity/DTO"
 	"Etog/internal/http-server/services"
 	"log/slog"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,19 +43,29 @@ func (a *AccountHandler) Registration(ctx *gin.Context) {
 		return
 	}
 
+	err, code := a.service.Registration(&account)
+	if err != nil {
+		ctx.JSON(code, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 	ctx.JSON(201, gin.H{
 		"message": "Account created",
 	})
 }
 
 func (a *AccountHandler) GetCode(ctx *gin.Context) {
-	var email string
+	type mail struct {
+		Mail string `json:"mail"`
+	}
+	email := mail{}
 	err := ctx.ShouldBindJSON(&email)
 	if err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
 		return
 	}
-	err, code := a.service.SendCode(ctx, email)
+	err, code := a.service.SendCode(ctx, email.Mail)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 	}
@@ -98,7 +109,21 @@ func (a *AccountHandler) Authenticate(ctx *gin.Context) {
 	})
 }
 
-//сделать изменения аккаунта с аватаркой
+func (a *AccountHandler) ChangeData(ctx *gin.Context) {
+	var DTOAccount DTO.ChangeDataRequest
+	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+	fileHeader, err := ctx.FormFile("avatar")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	code, err := a.service.ChangeData(DTOAccount, ctx, fileHeader)
+}
+
+//отображать информацию аккаунта
 //сделать удаление аккаунта
 //сделать выход из всех сессий аккаунта
 //сделать запрос на галочку аккаунта
