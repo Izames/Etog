@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"mime/multipart"
 	"net/mail"
 	"strconv"
 	"time"
@@ -174,7 +173,7 @@ func (a *AuthService) Authenticate(auth DTO.AuthRequest) (string, string, error,
 	return token, refreshToken, nil, 200
 }
 
-func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Context, fileHeader *multipart.FileHeader) (interface{}, interface{}) {
+func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Context) (error, int) {
 	UserId := ctx.Value("UserId").(int)
 
 	accountDb, err := a.Storage.GetAccount(UserId)
@@ -187,7 +186,7 @@ func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Cont
 		return errors.New("internal server error"), 500
 	}
 
-	url, err := a.S3.Upload(fileHeader, "user-avatar/")
+	url, err := a.S3.Upload(account.File, "user-avatar/")
 
 	if err != nil {
 		a.log.Error("Error uploading file: " + err.Error())
@@ -198,5 +197,10 @@ func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Cont
 
 	accountDb.Description = account.Description
 
-	return accountDb, account
+	err = a.Storage.PutAccount(*accountDb)
+	if err != nil {
+		a.log.Error("Error putting account: " + err.Error())
+	}
+
+	return nil, 200
 }

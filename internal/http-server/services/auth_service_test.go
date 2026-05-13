@@ -7,8 +7,13 @@ import (
 	jwt2 "Etog/internal/lib/jwt"
 	"Etog/storage/psql"
 	"Etog/storage/redis"
+	"Etog/storage/s3"
+	"bytes"
 	"context"
 	"fmt"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -314,5 +319,124 @@ func TestAuthService_Authenticate_NotActive(t *testing.T) {
 	}
 	if code != 401 {
 		t.Fatalf("expected 401, got %d", code)
+	}
+}
+
+func createTestFile(t *testing.T) *multipart.FileHeader {
+	var b bytes.Buffer
+	writer := multipart.NewWriter(&b)
+
+	part, err := writer.CreateFormFile("file", "avatar.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	part.Write([]byte("fake image content"))
+
+	writer.Close()
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/upload",
+		&b,
+	)
+
+	req.Header.Set(
+		"Content-Type",
+		writer.FormDataContentType(),
+	)
+
+	err = req.ParseMultipartForm(10 << 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files := req.MultipartForm.File["file"]
+
+	return files[0]
+}
+
+func TestAuthService_ChangeData_Success(t *testing.T) {
+	service, _, _ := setup()
+
+	service.S3, _ = s3.NewS3(&config.S3{
+		Endpoint: "https://hb.vkcs.cloud",
+		Region:   "ru-msk",
+		Bucket:   "etog",
+		Access:   "sriyxkxEFpqD9hh2yB9fmJ",
+		Secret:   "7RpNAZqDtUqeRK4ixN5ges9AvVH5CAYEnHArxt6gaSu2",
+	})
+
+	acc := createTestAccount(t, service)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"UserId",
+		acc.Id,
+	)
+
+	file := createTestFile(t)
+
+	req := DTO.ChangeDataRequest{
+		Description: "new description",
+		File:        file,
+	}
+
+	err, code := service.ChangeData(req, ctx)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if code != 200 {
+		t.Fatalf("expected 200 got %d", code)
+	}
+
+	updated, errDb := service.Storage.GetAccount(acc.Id)
+	if errDb != nil {
+		t.Fatal(errDb)
+	}
+
+	if updated.Description != "new description" {
+		t.Fatalf(
+			"expected updated description got %s",
+			updated.Description,
+		)
+	}
+}
+
+func TestAuthService_ChangeData_UploadError(t *testing.T) {
+	service, _, _ := setup()
+
+	service.S3, _ = s3.NewS3(&config.S3{
+		Endpoint: "https://hb.vkcs.cloud",
+		Region:   "ru-msk",
+		Bucket:   "etog",
+		Access:   "sriyxkxEFpqD9hh2yB9fmJ",
+		Secret:   "7RpNAZqDtUqeRK4ixN5ges9AvVH5CAYEnHArxt6gaSu2",
+	})
+
+	acc := createTestAccount(t, service)
+
+	ctx := context.WithValue(
+		context.Background(),
+		"UserId",
+		acc.Id,
+	)
+
+	file := &multipart.FileHeader{}
+	req := DTO.ChangeDataRequest{
+		Description: "updated",
+		File:        file,
+	}
+
+	err, code := service.ChangeData(req, ctx)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != 500 {
+		t.Fatalf("expected 500 got %d", code)
 	}
 }

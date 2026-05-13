@@ -120,7 +120,13 @@ func (a *AccountHandler) ChangeData(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	code, err := a.service.ChangeData(DTOAccount, ctx, fileHeader)
+	DTOAccount.Avatar = fileHeader.Filename
+	err, code := a.service.ChangeData(DTOAccount, ctx)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
 }
 
 //отображать информацию аккаунта
