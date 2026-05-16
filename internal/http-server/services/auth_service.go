@@ -4,6 +4,7 @@ import (
 	"Etog/internal/config"
 	"Etog/internal/domain/entity"
 	"Etog/internal/domain/entity/DTO"
+	"Etog/internal/domain/repo"
 	"Etog/internal/lib/jwt"
 	mail2 "Etog/internal/lib/mail"
 	"Etog/storage"
@@ -15,10 +16,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net/http"
 	"net/mail"
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -44,7 +47,7 @@ func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Lo
 	}
 }
 
-func (a *AuthService) Registration(account *entity.Account) (error, int) {
+func (a *AuthService) Registration(account *entity.AccountDb) (error, int) {
 	const op = "services.Registration"
 
 	log := a.log.With(slog.String("op", op))
@@ -75,7 +78,7 @@ func (a *AuthService) Registration(account *entity.Account) (error, int) {
 	err = a.Storage.CreateAccount(*account)
 	if err != nil {
 		if errors.Is(err, storage.ErrAlreadyExists) {
-			a.log.Error("Account already exists " + account.Mail)
+			a.log.Error("AccountDb already exists " + account.Mail)
 			return errors.New("account already exists"), 409
 		} else {
 			a.log.Error("Error creating account: " + err.Error())
@@ -179,7 +182,7 @@ func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Cont
 	accountDb, err := a.Storage.GetAccount(UserId)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			a.log.Error("Account not found")
+			a.log.Error("AccountDb not found")
 			return errors.New("account not found"), 404
 		}
 		a.log.Error("Error getting account: " + err.Error())
@@ -203,4 +206,45 @@ func (a *AuthService) ChangeData(account DTO.ChangeDataRequest, ctx context.Cont
 	}
 
 	return nil, 200
+}
+
+func (a *AuthService) GetAccount(ctx *gin.Context, login string, id int) (int, *entity.Account, error) {
+	var account *entity.AccountDb
+	var err error
+	if id != -1 {
+		account, err = a.Storage.GetAccount(id)
+		if err != nil {
+			a.log.Error("Error getting account: " + err.Error())
+			return http.StatusInternalServerError, nil, errors.New("internal server error")
+		}
+	} else if login != "" {
+		account, err = a.Storage.GetAccountByLogin(login)
+		if err != nil {
+			a.log.Error("Error getting account: " + err.Error())
+			return http.StatusInternalServerError, nil, errors.New("internal server error")
+		}
+	} else {
+		return 400, nil, errors.New("wrong data")
+	}
+	if account == nil {
+		return http.StatusNotFound, nil, errors.New("account not found")
+	}
+	if !account.Active || account.Deleted {
+		return http.StatusNotFound, nil, errors.New("account not found")
+	}
+	return http.StatusOK, repo.FromDbUser(account), nil
+}
+
+func (a *AuthService) DeleteAccount(ctx *gin.Context, id int) (int, error) {
+	account, err := a.Storage.GetAccount(id)
+	if err != nil {
+		a.log.Error("Error getting account: " + err.Error())
+		return http.StatusInternalServerError, errors.New("internal server error")
+	}
+	account.Deleted = true
+	if err = a.Storage.PutAccount(*account); err != nil {
+		a.log.Error("Error putting account: " + err.Error())
+		return http.StatusInternalServerError, errors.New("internal server error")
+	}
+	return http.StatusOK, nil
 }

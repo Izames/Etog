@@ -7,6 +7,7 @@ import (
 	"Etog/internal/http-server/services"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,7 +28,7 @@ func NewAccountHandler(log *slog.Logger, service *services.AuthService) AccountH
 }
 
 func (a *AccountHandler) Registration(ctx *gin.Context) {
-	var account entity.Account
+	var account entity.AccountDb
 
 	if ctx.ContentType() != "application/json" {
 		ctx.JSON(400, gin.H{
@@ -51,7 +52,7 @@ func (a *AccountHandler) Registration(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(201, gin.H{
-		"message": "Account created",
+		"message": "AccountDb created",
 	})
 }
 
@@ -129,10 +130,42 @@ func (a *AccountHandler) ChangeData(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-//отображать информацию аккаунта
-//сделать удаление аккаунта
-//сделать выход из всех сессий аккаунта
+func (a *AccountHandler) GetAccountByLogin(ctx *gin.Context) {
+	type GetRequest struct {
+		Login string `json:"login"`
+		Id    int    `json:"id"`
+	}
+	var getRequest GetRequest
+	if err := ctx.ShouldBindJSON(&getRequest); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+
+	code, account, err := a.service.GetAccount(ctx, getRequest.Login, getRequest.Id)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err})
+		return
+	}
+	ctx.JSON(code, *account)
+}
+
+func (a *AccountHandler) DeleteAccount(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+		return
+	}
+	code, err := a.service.DeleteAccount(ctx, id)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
 //сделать запрос на галочку аккаунта
+//сделать подвтерждение на галочку аккаунта
 //сделать подписку на кого-то
 //сделать отписку  на кого-то
+//доделать функцию отображения подписок
 //сделать обновление почты/пароля

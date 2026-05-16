@@ -179,8 +179,17 @@ func (j *Jwt) JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		tokenString := strings.Split(authHeader, " ")[1]
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			context.JSON(http.StatusUnauthorized, gin.H{
+				"error": "invalid authorization header",
+			})
+			context.Abort()
+			return
+		}
 
+		tokenString := parts[1]
+		
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])

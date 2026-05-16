@@ -76,7 +76,7 @@ func (s *Storage) DeleteMockEvent(id int) error {
 	return nil
 }
 
-func (s *Storage) CreateAccount(account entity.Account) error {
+func (s *Storage) CreateAccount(account entity.AccountDb) error {
 	result := s.db.Create(&account)
 	if result.Error != nil {
 		var pgErr *pgconn.PgError
@@ -90,8 +90,8 @@ func (s *Storage) CreateAccount(account entity.Account) error {
 	return nil
 }
 
-func (s *Storage) GetAccount(id int) (*entity.Account, error) {
-	var account entity.Account
+func (s *Storage) GetAccount(id int) (*entity.AccountDb, error) {
+	var account entity.AccountDb
 	result := s.db.Where("id = ?", id).First(&account)
 	if result.Error != nil {
 		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
@@ -102,8 +102,8 @@ func (s *Storage) GetAccount(id int) (*entity.Account, error) {
 	return &account, nil
 }
 
-func (s *Storage) GetAccountByLogin(login string) (*entity.Account, error) {
-	var account entity.Account
+func (s *Storage) GetAccountByLogin(login string) (*entity.AccountDb, error) {
+	var account entity.AccountDb
 	result := s.db.Where("login = ?", login).First(&account)
 	if result.Error != nil {
 		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
@@ -114,8 +114,8 @@ func (s *Storage) GetAccountByLogin(login string) (*entity.Account, error) {
 	return &account, nil
 }
 
-func (s *Storage) GetAccountByEmail(email string) (*entity.Account, error) {
-	var account entity.Account
+func (s *Storage) GetAccountByEmail(email string) (*entity.AccountDb, error) {
+	var account entity.AccountDb
 	result := s.db.Where("mail = ?", email).First(&account)
 	if result.Error != nil {
 		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
@@ -126,7 +126,7 @@ func (s *Storage) GetAccountByEmail(email string) (*entity.Account, error) {
 	return &account, nil
 }
 
-func (s *Storage) PutAccount(account entity.Account) error {
+func (s *Storage) PutAccount(account entity.AccountDb) error {
 	result := s.db.Save(&account)
 	if result.Error != nil {
 		return result.Error

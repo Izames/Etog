@@ -10,7 +10,6 @@ import (
 	"Etog/storage/psql"
 	"Etog/storage/redis"
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -23,10 +22,6 @@ import (
 )
 
 func main() {
-	var migrationPath string
-	flag.StringVar(&migrationPath, "migrations-path", "", "Path to migration folder")
-
-	flag.Parse()
 	conf := config.MustLoad()
 	log := NewLogger(conf.Env)
 	database := psql.New(fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
@@ -66,8 +61,9 @@ func main() {
 	rAccount.POST("/auth", accountHandler.Authenticate)
 	rAccount.POST("/sendCode", accountHandler.GetCode)
 	rAccount.POST("/confirmCode", accountHandler.ConfirmCode)
-
-	rAccount.Use()
+	rAccount.Use(jwt.JWTAuth())
+	rAccount.GET("/getAccount", accountHandler.GetAccountByLogin)
+	rAccount.POST("/changeData", accountHandler.ChangeData)
 
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%s", conf.Port),

@@ -36,8 +36,8 @@ func setup() (*AuthService, *psql.Storage, *redis.RedisDb) {
 	return NewAuthService(storage, rStorage, nil, nil, jwt), storage, rStorage
 }
 
-func createTestAccount(t *testing.T, service *AuthService) *entity.Account {
-	acc := &entity.Account{
+func createTestAccount(t *testing.T, service *AuthService) *entity.AccountDb {
+	acc := &entity.AccountDb{
 		Mail:        fmt.Sprintf("test_%s@mail.ru", uuid.New().String()),
 		Login:       fmt.Sprintf("test_%s", uuid.New().String()),
 		Password:    "password123",
@@ -60,7 +60,7 @@ func createTestAccount(t *testing.T, service *AuthService) *entity.Account {
 func TestAuthService_Registration(t *testing.T) {
 	service, _, _ := setup()
 
-	acc := &entity.Account{
+	acc := &entity.AccountDb{
 		Mail:        fmt.Sprintf("user%s@mail.ru", uuid.New().String()),
 		Login:       fmt.Sprintf("user_%s", uuid.New().String()),
 		Password:    "password123",
@@ -81,7 +81,7 @@ func TestAuthService_Registration_ExpectFailOnSameEmail(t *testing.T) {
 
 	mail := fmt.Sprintf("same_%d@mail.ru", time.Now().UnixNano())
 
-	acc := &entity.Account{
+	acc := &entity.AccountDb{
 		Mail:     mail,
 		Login:    fmt.Sprintf("user_%s", uuid.New().String()),
 		Password: "password123",
@@ -98,7 +98,7 @@ func TestAuthService_Registration_ExpectFailOnSameEmail(t *testing.T) {
 func TestAuthService_Registration_FailOnShortPass(t *testing.T) {
 	service, _, _ := setup()
 
-	err, code := service.Registration(&entity.Account{
+	err, code := service.Registration(&entity.AccountDb{
 		Mail:     "test@mail.ru",
 		Login:    "123456",
 		Password: "123",
@@ -112,7 +112,7 @@ func TestAuthService_Registration_FailOnShortPass(t *testing.T) {
 func TestAuthService_Registration_FailOnWrongMail(t *testing.T) {
 	service, _, _ := setup()
 
-	err, code := service.Registration(&entity.Account{
+	err, code := service.Registration(&entity.AccountDb{
 		Mail:     "wrong_mail",
 		Login:    "123456",
 		Password: "password123",
@@ -213,7 +213,7 @@ func TestAuthService_Authenticate_Success(t *testing.T) {
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	account := entity.Account{
+	account := entity.AccountDb{
 		Mail:     mail,
 		Login:    login,
 		Password: string(hash),
@@ -265,7 +265,7 @@ func TestAuthService_Authenticate_WrongPassword(t *testing.T) {
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	account := entity.Account{
+	account := entity.AccountDb{
 		Mail:     mail,
 		Login:    login,
 		Password: string(hash),
@@ -298,7 +298,7 @@ func TestAuthService_Authenticate_NotActive(t *testing.T) {
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	account := entity.Account{
+	account := entity.AccountDb{
 		Mail:     mail,
 		Login:    login,
 		Password: string(hash),
@@ -437,6 +437,182 @@ func TestAuthService_ChangeData_UploadError(t *testing.T) {
 	}
 
 	if code != 500 {
+		t.Fatalf("expected 500 got %d", code)
+	}
+}
+
+func TestAuthService_GetAccount_ById_Success(t *testing.T) {
+	service, _, _ := setup()
+
+	acc := createTestAccount(t, service)
+
+	code, account, err := service.GetAccount(nil, "", acc.Id)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", code)
+	}
+
+	if account == nil {
+		t.Fatal("account is nil")
+	}
+}
+
+func TestAuthService_GetAccount_ByLogin_Success(t *testing.T) {
+	service, _, _ := setup()
+
+	acc := createTestAccount(t, service)
+
+	code, account, err := service.GetAccount(nil, acc.Login, -1)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", code)
+	}
+
+	if account == nil {
+		t.Fatal("account is nil")
+	}
+
+	if account.Login != acc.Login {
+		t.Fatalf(
+			"expected login %s got %s",
+			acc.Login,
+			account.Login,
+		)
+	}
+}
+
+func TestAuthService_GetAccount_NotFound(t *testing.T) {
+	service, _, _ := setup()
+
+	code, account, err := service.GetAccount(nil, "", 999999)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != http.StatusNotFound &&
+		code != http.StatusInternalServerError {
+		t.Fatalf("unexpected status code %d", code)
+	}
+
+	if account != nil {
+		t.Fatal("account should be nil")
+	}
+}
+
+func TestAuthService_GetAccount_WrongData(t *testing.T) {
+	service, _, _ := setup()
+
+	code, account, err := service.GetAccount(nil, "", -1)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected 400 got %d", code)
+	}
+
+	if account != nil {
+		t.Fatal("account should be nil")
+	}
+}
+
+func TestAuthService_GetAccount_Deleted(t *testing.T) {
+	service, db, _ := setup()
+
+	acc := createTestAccount(t, service)
+
+	acc.Deleted = true
+
+	if err := db.PutAccount(*acc); err != nil {
+		t.Fatal(err)
+	}
+
+	code, account, err := service.GetAccount(nil, "", acc.Id)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d", code)
+	}
+
+	if account != nil {
+		t.Fatal("account should be nil")
+	}
+}
+
+func TestAuthService_GetAccount_NotActive(t *testing.T) {
+	service, db, _ := setup()
+
+	acc := createTestAccount(t, service)
+
+	acc.Active = false
+
+	if err := db.PutAccount(*acc); err != nil {
+		t.Fatal(err)
+	}
+
+	code, account, err := service.GetAccount(nil, "", acc.Id)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != http.StatusNotFound {
+		t.Fatalf("expected 404 got %d", code)
+	}
+
+	if account != nil {
+		t.Fatal("account should be nil")
+	}
+}
+
+func TestAuthService_DeleteAccount_Success(t *testing.T) {
+	service, _, _ := setup()
+
+	acc := createTestAccount(t, service)
+
+	code, err := service.DeleteAccount(nil, acc.Id)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if code != http.StatusOK {
+		t.Fatalf("expected 200 got %d", code)
+	}
+
+	updated, errDb := service.Storage.GetAccount(acc.Id)
+	if errDb != nil {
+		t.Fatal(errDb)
+	}
+
+	if !updated.Deleted {
+		t.Fatal("account should be deleted")
+	}
+}
+
+func TestAuthService_DeleteAccount_NotFound(t *testing.T) {
+	service, _, _ := setup()
+
+	code, err := service.DeleteAccount(nil, 999999)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+
+	if code != http.StatusInternalServerError {
 		t.Fatalf("expected 500 got %d", code)
 	}
 }
