@@ -248,3 +248,7 @@ func (a *AuthService) DeleteAccount(ctx *gin.Context, id int) (int, error) {
 	}
 	return http.StatusOK, nil
 }
+
+func (a *AuthService) RequestOfficial(ctx *gin.Context, id int) error {
+	return a.Storage.CreateOfficialRequest(id)
+}

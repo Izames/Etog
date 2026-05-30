@@ -5,6 +5,7 @@ import (
 	"Etog/storage"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/driver/postgres"
@@ -157,4 +158,13 @@ func (s *Storage) DeleteRefreshToken(userId int) error {
 		return result.Error
 	}
 	return nil
+}
+
+func (s *Storage) CreateOfficialRequest(id int) error {
+	result := s.db.Save(&entity.OfficialRequest{
+		UserID:    id,
+		CreatedAt: time.Now(),
+		Comment:   nil,
+	})
+	return result.Error
 }

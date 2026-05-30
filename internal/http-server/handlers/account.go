@@ -69,6 +69,7 @@ func (a *AccountHandler) GetCode(ctx *gin.Context) {
 	err, code := a.service.SendCode(ctx, email.Mail)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
 	}
 
 	ctx.JSON(200, gin.H{})
@@ -78,6 +79,7 @@ func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
 	var confirmCode DTO.ConfirmCodeRequest
 	if err := ctx.ShouldBindJSON(&confirmCode); err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
 	}
 
 	err, code, token, refreshToken := a.service.ConfirmCode(ctx, confirmCode)
@@ -163,8 +165,19 @@ func (a *AccountHandler) DeleteAccount(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-//сделать запрос на галочку аккаунта
-//сделать подвтерждение на галочку аккаунта
+func (a *AccountHandler) RequestOfficial(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+		return
+	}
+	if err = a.service.RequestOfficial(ctx, id); err != nil {
+		ctx.JSON(500, gin.H{"error": "internal server error"})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
 //сделать подписку на кого-то
 //сделать отписку  на кого-то
 //доделать функцию отображения подписок
