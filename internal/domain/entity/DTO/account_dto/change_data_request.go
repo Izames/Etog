@@ -1,4 +1,4 @@
-package DTO
+package account_dto
 
 import "mime/multipart"
 

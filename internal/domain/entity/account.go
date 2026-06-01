@@ -11,10 +11,11 @@ type AccountDb struct {
 	Rating      int    `gorm:"column:rating"`
 	Deleted     bool   `gorm:"column:deleted"`
 	Active      bool   `gorm:"column:active"`
+	Followers   int    `gorm:"column:followers"`
 }
 
 func (AccountDb) TableName() string {
-	return "account"
+	return "account_dto"
 }
 
 type Account struct {
@@ -23,4 +24,5 @@ type Account struct {
 	Official    bool   `gorm:"column:official"`
 	Description string `gorm:"column:description"`
 	Rating      int    `gorm:"column:rating"`
+	Followers   int    `gorm:"column:followers"`
 }

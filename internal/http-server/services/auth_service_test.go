@@ -3,7 +3,7 @@ package services
 import (
 	"Etog/internal/config"
 	"Etog/internal/domain/entity"
-	"Etog/internal/domain/entity/DTO"
+	"Etog/internal/domain/entity/DTO/account_dto"
 	jwt2 "Etog/internal/lib/jwt"
 	"Etog/storage/psql"
 	"Etog/storage/redis"
@@ -41,12 +41,12 @@ func createTestAccount(t *testing.T, service *AuthService) *entity.AccountDb {
 		Mail:        fmt.Sprintf("test_%s@mail.ru", uuid.New().String()),
 		Login:       fmt.Sprintf("test_%s", uuid.New().String()),
 		Password:    "password123",
-		Description: "test account",
+		Description: "test account_dto",
 	}
 
 	err, code := service.Registration(acc)
 	if err != nil || code != 200 {
-		t.Fatalf("failed to create account: %v %d", err, code)
+		t.Fatalf("failed to create account_dto: %v %d", err, code)
 	}
 
 	created, err := service.Storage.GetAccountByEmail(acc.Mail)
@@ -136,7 +136,7 @@ func TestAuthService_SendCode_And_Confirm(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err, code, token, refreshToken := service.ConfirmCode(ctx, DTO.ConfirmCodeRequest{
+	err, code, token, refreshToken := service.ConfirmCode(ctx, account_dto.ConfirmCodeRequest{
 		Email: acc.Mail,
 		Code:  "123456",
 	})
@@ -224,7 +224,7 @@ func TestAuthService_Authenticate_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token, refresh, err, code := a.Authenticate(DTO.AuthRequest{
+	token, refresh, err, code := a.Authenticate(account.AuthRequest{
 		Login:    login,
 		Password: password,
 	})
@@ -243,7 +243,7 @@ func TestAuthService_Authenticate_Success(t *testing.T) {
 func TestAuthService_Authenticate_NotFound(t *testing.T) {
 	a, _, _ := setup()
 
-	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+	_, _, err, code := a.Authenticate(account_dto.AuthRequest{
 		Login:    "no_user",
 		Password: "1234",
 	})
@@ -276,7 +276,7 @@ func TestAuthService_Authenticate_WrongPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+	_, _, err, code := a.Authenticate(account.AuthRequest{
 		Login:    login,
 		Password: "wrong",
 	})
@@ -309,7 +309,7 @@ func TestAuthService_Authenticate_NotActive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err, code := a.Authenticate(DTO.AuthRequest{
+	_, _, err, code := a.Authenticate(account.AuthRequest{
 		Login:    login,
 		Password: password,
 	})
@@ -377,7 +377,7 @@ func TestAuthService_ChangeData_Success(t *testing.T) {
 
 	file := createTestFile(t)
 
-	req := DTO.ChangeDataRequest{
+	req := account_dto.ChangeDataRequest{
 		Description: "new description",
 		File:        file,
 	}
@@ -425,7 +425,7 @@ func TestAuthService_ChangeData_UploadError(t *testing.T) {
 	)
 
 	file := &multipart.FileHeader{}
-	req := DTO.ChangeDataRequest{
+	req := account_dto.ChangeDataRequest{
 		Description: "updated",
 		File:        file,
 	}
@@ -457,7 +457,7 @@ func TestAuthService_GetAccount_ById_Success(t *testing.T) {
 	}
 
 	if account == nil {
-		t.Fatal("account is nil")
+		t.Fatal("account_dto is nil")
 	}
 }
 
@@ -477,7 +477,7 @@ func TestAuthService_GetAccount_ByLogin_Success(t *testing.T) {
 	}
 
 	if account == nil {
-		t.Fatal("account is nil")
+		t.Fatal("account_dto is nil")
 	}
 
 	if account.Login != acc.Login {
@@ -504,7 +504,7 @@ func TestAuthService_GetAccount_NotFound(t *testing.T) {
 	}
 
 	if account != nil {
-		t.Fatal("account should be nil")
+		t.Fatal("account_dto should be nil")
 	}
 }
 
@@ -522,7 +522,7 @@ func TestAuthService_GetAccount_WrongData(t *testing.T) {
 	}
 
 	if account != nil {
-		t.Fatal("account should be nil")
+		t.Fatal("account_dto should be nil")
 	}
 }
 
@@ -548,7 +548,7 @@ func TestAuthService_GetAccount_Deleted(t *testing.T) {
 	}
 
 	if account != nil {
-		t.Fatal("account should be nil")
+		t.Fatal("account_dto should be nil")
 	}
 }
 
@@ -574,7 +574,7 @@ func TestAuthService_GetAccount_NotActive(t *testing.T) {
 	}
 
 	if account != nil {
-		t.Fatal("account should be nil")
+		t.Fatal("account_dto should be nil")
 	}
 }
 
@@ -599,7 +599,7 @@ func TestAuthService_DeleteAccount_Success(t *testing.T) {
 	}
 
 	if !updated.Deleted {
-		t.Fatal("account should be deleted")
+		t.Fatal("account_dto should be deleted")
 	}
 }
 

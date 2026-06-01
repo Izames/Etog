@@ -3,7 +3,7 @@ package handlers
 import (
 	"Etog/internal/config"
 	"Etog/internal/domain/entity"
-	"Etog/internal/domain/entity/DTO"
+	"Etog/internal/domain/entity/DTO/account_dto"
 	"Etog/internal/http-server/services"
 	"log/slog"
 	"net/http"
@@ -76,7 +76,7 @@ func (a *AccountHandler) GetCode(ctx *gin.Context) {
 }
 
 func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
-	var confirmCode DTO.ConfirmCodeRequest
+	var confirmCode account_dto.ConfirmCodeRequest
 	if err := ctx.ShouldBindJSON(&confirmCode); err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
 		return
@@ -96,7 +96,7 @@ func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
 }
 
 func (a *AccountHandler) Authenticate(ctx *gin.Context) {
-	var DTOAccount DTO.AuthRequest
+	var DTOAccount account_dto.AuthRequest
 	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
 		return
@@ -113,7 +113,7 @@ func (a *AccountHandler) Authenticate(ctx *gin.Context) {
 }
 
 func (a *AccountHandler) ChangeData(ctx *gin.Context) {
-	var DTOAccount DTO.ChangeDataRequest
+	var DTOAccount account_dto.ChangeDataRequest
 	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
 		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
 		return
@@ -178,7 +178,65 @@ func (a *AccountHandler) RequestOfficial(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-//сделать подписку на кого-то
-//сделать отписку  на кого-то
-//доделать функцию отображения подписок
-//сделать обновление почты/пароля
+func (a *AccountHandler) Subscribe(ctx *gin.Context) {
+	follower, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid token: " + err.Error()})
+		return
+	}
+	type SubscribeRequest struct {
+		Following int `json:"following"`
+	}
+	var subscribeRequest SubscribeRequest
+	if err = ctx.ShouldBindJSON(&subscribeRequest); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+	if err = a.service.Subscribe(ctx, subscribeRequest.Following, follower); err != nil {
+		ctx.JSON(400, gin.H{"error": "internal server error"})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+func (a *AccountHandler) Unsubscribe(ctx *gin.Context) {
+	follower, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+		return
+	}
+	type UnsubscribeRequest struct {
+		Following int `json:"following"`
+	}
+	var unsubscribeRequest UnsubscribeRequest
+	if err = ctx.ShouldBindJSON(&unsubscribeRequest); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+	if err = a.service.Unsubscribe(ctx, follower, unsubscribeRequest.Following); err != nil {
+		ctx.JSON(400, gin.H{"error": "internal server error"})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+func (a *AccountHandler) ChangePassword(ctx *gin.Context) {
+	id, err := strconv.Atoi(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+		return
+	}
+	var reqDto account_dto.ChangePassRequest
+	if err = ctx.ShouldBindJSON(&reqDto); err != nil {
+		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		return
+	}
+	if err = a.service.ChangePasword(ctx, id, reqDto.OldPassword, reqDto.NewPassword); err != nil {
+		ctx.JSON(400, gin.H{"error": "internal server error"})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+//сделать смена почты
+//восстановить пароль

@@ -1,0 +1,1 @@
+ALTER TABLE account DELETE IF EXISTS COLUMN followers;

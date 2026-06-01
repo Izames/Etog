@@ -168,3 +168,35 @@ func (s *Storage) CreateOfficialRequest(id int) error {
 	})
 	return result.Error
 }
+
+func (s *Storage) Subscribe(id, follower int) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&entity.Subscribers{
+			AccountId:    id,
+			SubscriberId: follower,
+		}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&entity.AccountDb{}).Where("id = ?", id).
+			UpdateColumn("followers", gorm.Expr("followers + ?", 1)).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (s *Storage) Unsubscribe(id, follower int) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("account_id = ? AND subscriber_id = ?", id, follower).Delete(&entity.Subscribers{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&entity.AccountDb{}).Where("id = ?", id).
+			UpdateColumn("followers", gorm.Expr("followers - ?", 1)).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}

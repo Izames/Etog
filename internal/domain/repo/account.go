@@ -9,6 +9,7 @@ func FromDbUser(account *entity.AccountDb) *entity.Account {
 		Official:    account.Official,
 		Description: account.Description,
 		Rating:      account.Rating,
+		Followers:   account.Followers,
 	}
 	return newAccount
 }

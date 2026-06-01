@@ -1,4 +1,4 @@
-package DTO
+package account_dto
 
 type AuthRequest struct {
 	Login    string `json:"login"`
