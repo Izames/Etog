@@ -15,7 +15,7 @@ type AccountDb struct {
 }
 
 func (AccountDb) TableName() string {
-	return "account_dto"
+	return "account"
 }
 
 type Account struct {

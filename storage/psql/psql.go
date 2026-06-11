@@ -16,8 +16,6 @@ type Storage struct {
 	db *gorm.DB
 }
 
-// сделать систему ошибок для определения проблем с базой данных, или просто не удалось найти
-
 func New(storagePath string, log *slog.Logger) *Storage {
 	if log == nil {
 		log = slog.Default()
@@ -143,7 +141,7 @@ func (s *Storage) CreateRefreshToken(token entity.RefreshToken) error {
 	return nil
 }
 
-func (s *Storage) GetRefreshToken(tokenId string) (*entity.RefreshToken, error) {
+func (s *Storage) GetRefreshToken(tokenId []byte) (*entity.RefreshToken, error) {
 	var refreshToken entity.RefreshToken
 	result := s.db.Where("token_id = ?", tokenId).First(&refreshToken)
 	if result.Error != nil {
