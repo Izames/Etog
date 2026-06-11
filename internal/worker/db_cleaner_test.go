@@ -13,7 +13,7 @@ import (
 )
 
 func TestCleaner_Run(t *testing.T) {
-	t.Logf("test started. Dont forget to change ticker metric for faster test")
+	t.Logf("test started.")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestCleaner_Run(t *testing.T) {
 	db.Create(&validToken)
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cleaner := NewCleaner(db, logger)
+	cleaner := NewCleaner(db, logger, 100*time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

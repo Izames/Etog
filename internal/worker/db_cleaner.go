@@ -11,17 +11,18 @@ import (
 )
 
 type Cleaner struct {
-	db   *gorm.DB
-	slog *slog.Logger
+	db       *gorm.DB
+	slog     *slog.Logger
+	interval time.Duration
 }
 
-func NewCleaner(db *gorm.DB, slog *slog.Logger) *Cleaner {
-	return &Cleaner{db: db, slog: slog}
+func NewCleaner(db *gorm.DB, slog *slog.Logger, interval time.Duration) *Cleaner {
+	return &Cleaner{db: db, slog: slog, interval: interval}
 }
 
 func (cleaner *Cleaner) Run(ctx context.Context) {
 	cleaner.slog.Info("Cleaner started successfully\n")
-	ticker := time.NewTicker(24 * time.Minute)
+	ticker := time.NewTicker(cleaner.interval)
 	go func() {
 		defer ticker.Stop()
 		for {
