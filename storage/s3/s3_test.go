@@ -22,6 +22,22 @@ const (
 	endpoint   = "https://hb.vkcs.cloud"
 )
 
+func setupS3(t *testing.T) *S3 {
+	t.Helper()
+	conf := &config.S3{
+		Region:   region,
+		Endpoint: endpoint,
+		Access:   access,
+		Secret:   secret,
+		Bucket:   bucket,
+	}
+	s3, err := NewS3(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s3
+}
+
 func createTestImage(t *testing.T) *multipart.FileHeader {
 	t.Helper()
 
@@ -29,15 +45,15 @@ func createTestImage(t *testing.T) *multipart.FileHeader {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		os.Remove(tmpFile.Name())
+	})
 
-	content := []byte("fake image content")
-	_, err = tmpFile.Write(content)
+	_, err = tmpFile.Write([]byte("fake image content"))
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	err = tmpFile.Close()
-	if err != nil {
+	if err = tmpFile.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,21 +69,17 @@ func createTestImage(t *testing.T) *multipart.FileHeader {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	defer file.Close()
 
-	_, err = io.Copy(part, file)
-	if err != nil {
+	if _, err = io.Copy(part, file); err != nil {
 		t.Fatal(err)
 	}
-
 	writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	err = req.ParseMultipartForm(10 << 20)
-	if err != nil {
+	if err = req.ParseMultipartForm(10 << 20); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,61 +87,52 @@ func createTestImage(t *testing.T) *multipart.FileHeader {
 	if len(files) == 0 {
 		t.Fatal("file not found in multipart form")
 	}
-
 	return files[0]
 }
 
 func TestUpload(t *testing.T) {
-
-	conf := &config.S3{
-		Region:   region,
-		Endpoint: endpoint,
-		Access:   access,
-		Secret:   secret,
-		Bucket:   bucket,
-	}
-
-	s3, err := NewS3(conf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	storage := setupS3(t)
 	fileHeader := createTestImage(t)
 
-	url, err := s3.Upload(fileHeader, pathBucket)
+	location, err := storage.Upload(fileHeader, pathBucket)
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}
-
-	if url == "" {
+	if location == "" {
 		t.Fatal("expected non-empty url")
 	}
+
+	// Проверяем что файл реально доступен
+	resp, err := http.Get(location)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Errorf("файл недоступен по URL после загрузки: %v", err)
+	}
+
+	t.Cleanup(func() {
+		storage.Delete(location)
+	})
+	t.Log("func [Upload] is OK")
 }
 
 func TestDelete(t *testing.T) {
-
-	conf := &config.S3{
-		Region:   region,
-		Endpoint: endpoint,
-		Access:   access,
-		Secret:   secret,
-		Bucket:   bucket,
-	}
-
-	s3, err := NewS3(conf)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	storage := setupS3(t)
 	fileHeader := createTestImage(t)
 
-	url, err := s3.Upload(fileHeader, pathBucket)
+	location, err := storage.Upload(fileHeader, pathBucket)
 	if err != nil {
 		t.Fatalf("upload failed: %v", err)
 	}
 
-	err = s3.Delete(url)
+	err = storage.Delete(location)
 	if err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
+
+	// Проверяем что файл реально удалён
+	resp, err := http.Get(location)
+	if err == nil && resp.StatusCode == http.StatusOK {
+		t.Error("файл должен быть удалён, но всё ещё доступен")
+		return
+	}
+	t.Log("func [Delete] is OK")
 }

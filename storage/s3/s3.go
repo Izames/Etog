@@ -2,8 +2,10 @@ package s3
 
 import (
 	"Etog/internal/config"
+	"strings"
 
 	"mime/multipart"
+	neturl "net/url" // алиас, т.к. переменная тоже называется url
 	"path"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -59,9 +61,16 @@ func (s *S3) Upload(fileHeader *multipart.FileHeader, pathS3 string) (string, er
 
 func (s *S3) Delete(url string) error {
 	svc := s3.New(s.session)
-	_, err := svc.DeleteObject(&s3.DeleteObjectInput{
+
+	parsed, err := neturl.Parse(url)
+	if err != nil {
+		return err
+	}
+	key := strings.TrimPrefix(parsed.Path, "/"+s.config.Bucket+"/")
+
+	_, err = svc.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(s.config.Bucket),
-		Key:    aws.String(url),
+		Key:    aws.String(key),
 	})
 	return err
 }
