@@ -82,7 +82,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	cleaner := worker.NewCleaner(database.ReturnDb(), log)
+	cleaner := worker.NewCleaner(database.ReturnDb(), log, time.Hour*2)
 	cleaner.Run(ctx)
 
 	<-ctx.Done()

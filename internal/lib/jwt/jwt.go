@@ -2,7 +2,9 @@ package jwt
 
 import (
 	"Etog/internal/domain/entity"
+	"Etog/storage"
 	"Etog/storage/psql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -40,7 +42,7 @@ func (j *Jwt) CreateAccessToken(userId int) (string, error) {
 func (j *Jwt) CreateRefreshToken(userId int) (string, error) {
 	GenTokenID := uuid.New().String()
 	err := j.DeleteRefreshToken(userId)
-	if err != nil {
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return "", err
 	}
 	tokenID, err := bcrypt.GenerateFromPassword([]byte(GenTokenID), bcrypt.DefaultCost)
@@ -139,7 +141,9 @@ func (j *Jwt) RefreshToken(refreshTokenString string) (error, string) {
 		return fmt.Errorf("invalid refresh token"), ""
 	}
 
-	_, err = j.Storage.GetRefreshToken(tokenId)
+	tokenId_byte := []byte(tokenId)
+
+	_, err = j.Storage.GetRefreshToken(tokenId_byte)
 	if err != nil {
 		return fmt.Errorf("invalid refresh token"), ""
 	}
@@ -189,12 +193,12 @@ func (j *Jwt) JWTAuth() gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
-		
+
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 			}
-			return j.JwtKey, nil
+			return []byte(j.JwtKey), nil
 		})
 		if err != nil {
 			context.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})

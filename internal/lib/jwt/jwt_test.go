@@ -123,10 +123,15 @@ func TestJwt_CheckAccessToken(t *testing.T) {
 func TestJwt_RefreshToken(t *testing.T) {
 	jwt := setup()
 	setUserId := 67
+
 	token, err := jwt.CreateRefreshToken(setUserId)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		jwt.DeleteRefreshToken(setUserId)
+	})
+
 	err, newToken := jwt.RefreshToken(token)
 	if err != nil {
 		t.Fatal(err)
@@ -134,22 +139,48 @@ func TestJwt_RefreshToken(t *testing.T) {
 	if err = jwt.CheckAccessToken(newToken); err != nil {
 		t.Fatal(err)
 	}
+
+	// Проверяем userId в новом токене
+	keyFunc := func(_ *jwt2.Token) (interface{}, error) {
+		return []byte(jwt.JwtKey), nil
+	}
+	parsed, err := jwt2.Parse(newToken, keyFunc)
+	if err != nil {
+		t.Fatalf("error parsing refreshed token: %v", err)
+	}
+	claims, ok := parsed.Claims.(jwt2.MapClaims)
+	if !ok {
+		t.Fatal("invalid claims in refreshed token")
+	}
+	sub, ok := claims["sub"].(float64)
+	if !ok {
+		t.Fatal("missing sub in refreshed token")
+	}
+	if int(sub) != setUserId {
+		t.Fatalf("wrong userId in refreshed token: want %d, got %d", setUserId, int(sub))
+	}
 }
 
 func TestJwt_DeleteRefreshToken(t *testing.T) {
 	jwt := setup()
-	setUserId := 67
+	setUserId := 68 // отдельный userId чтобы не пересекаться с другими тестами
+
 	token, err := jwt.CreateRefreshToken(setUserId)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		jwt.DeleteRefreshToken(setUserId)
+	})
+
 	err = jwt.DeleteRefreshToken(setUserId)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err, _ = jwt.RefreshToken(token)
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected error after delete, got nil")
 	}
 }
 
