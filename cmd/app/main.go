@@ -49,7 +49,7 @@ func main() {
 	}))
 
 	rMockEv := router.Group("/event")
-	rAccount := router.Group("/account_dto")
+	rAccount := router.Group("/account")
 
 	rMockEv.POST("/add", mockHandler.CreateMockEvent)
 	rMockEv.GET("/get/:id", mockHandler.GetMockEvent)

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"Etog/internal/config"
-	"Etog/internal/domain/entity"
 	"Etog/internal/domain/entity/DTO/account_dto"
 	"Etog/internal/http-server/services"
 	"log/slog"
@@ -28,7 +27,7 @@ func NewAccountHandler(log *slog.Logger, service *services.AuthService) AccountH
 }
 
 func (a *AccountHandler) Registration(ctx *gin.Context) {
-	var account entity.AccountDb
+	var account account_dto.RegReq
 
 	if ctx.ContentType() != "application/json" {
 		ctx.JSON(400, gin.H{
@@ -238,5 +237,23 @@ func (a *AccountHandler) ChangePassword(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-//сделать смена почты
+//func (a *AccountHandler) ChangeMail(ctx *gin.Context) {
+//	type GetRequest struct {
+//		NewMail string `json:"mail"`
+//		Code    string `json:"code"`
+//	}
+//	id, err := strconv.Atoi(ctx.Param("id"))
+//	if err != nil {
+//		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+//		return
+//
+//	}
+//	var getRequest GetRequest
+//	if err = ctx.ShouldBindJSON(&getRequest); err != nil {
+//		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+//		return
+//	}
+//
+//}
+
 //восстановить пароль

@@ -47,26 +47,35 @@ func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Lo
 	}
 }
 
-func (a *AuthService) Registration(account *entity.AccountDb) (error, int) {
+func (a *AuthService) Registration(req *account_dto.RegReq) (error, int) {
 	const op = "services.Registration"
 
 	log := a.log.With(slog.String("op", op))
 
-	if account.Login == "" || account.Password == "" || account.Mail == "" {
+	if req.Login == "" || req.Password == "" || req.Mail == "" {
 		return errors.New("please provide login, password and mail"), 400
 	}
 
-	if len(account.Password) < 7 {
+	if len(req.Password) < 7 {
 		return errors.New("password must be at least 8 characters"), 400
 	}
-	_, err := mail.ParseAddress(account.Mail)
+	_, err := mail.ParseAddress(req.Mail)
 	if err != nil {
 		return errors.New("invalid mail address"), 400
 	}
 
-	account.Official = false
-	account.Rating = 100
-	account.Active = false
+	account := &entity.AccountDb{
+		Mail:        req.Mail,
+		Login:       req.Login,
+		Password:    req.Password,
+		Official:    false,
+		Description: req.Description,
+		Rating:      100,
+		Deleted:     false,
+		Active:      false,
+		Followers:   0,
+	}
+
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("Error generating hash password")
