@@ -19,6 +19,7 @@ func (AccountDb) TableName() string {
 }
 
 type Account struct {
+	Id          int    `gorm:"primary_key;column:id"`
 	Login       string `gorm:"column:login"`
 	Avatar      string `gorm:"column:avatar"`
 	Official    bool   `gorm:"column:official"`
