@@ -24,36 +24,36 @@ Creates a new user. Account 'active' status is 'false' until email is confirmed.
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 201 | Account created, confirmation code sent to email |
-| 400 | Validation error |
-| 409 | Email already taken |
-| 409 | Username already taken |
-| 500 | Server error |
+| Code | Body                               | Description                                      |
+|------|------------------------------------|--------------------------------------------------|
+| 201 | `{}`                               | Account created, confirmation code sent to email |
+| 400 | `{"error": "validation error"}`    | Validation error                                 |
+| 409 | `{"error": "login already taken"}` | login already taken                              |
+| 409 | `{"error": "email already taken"}` | email already taken                              |
+| 500 | `{"error": "server error"}`        |  Server error                                    |
 
 ---
 
 ### Send confirmation code
 
-`POST /account/sendcode`
+`POST /account/sendCode`
 
 Sends a 6-digit confirmation code to the specified email.
 
 **Request body:**
 ```json
 {
-  "email": "string"
+  "mail": "string"
 }
 ```
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Code sent |
-| 400 | Validation error |
-| 500 | Server error |
+| Code | Body                            | Description      |
+|------|---------------------------------|------------------|
+| 200 | `{"code": "string"}`            | Code sent        |
+| 400 | `{"error": "validation error"}` | Validation error |
+| 500 | `{"error": "server error"}`      |  Server error    |
 
 ---
 
@@ -73,12 +73,12 @@ Verifies the code and activates the account. Returns JWT on success.
 
 **Responses:**
 
-| Code | Body | Description |
-|------|------|-------------|
-| 200 | `{ "token": "string" }` | Account activated |
-| 400 | `{ "error": "..." }` | Validation error |
-| 400 | `{ "error": "..." }` | Invalid or expired code |
-| 500 | `{ "error": "..." }` | Server error |
+| Code | Body                                              | Description |
+|------|---------------------------------------------------|-------------|
+| 200 | `{ "token": "string", "refresh_token: "string" }` | Account activated |
+| 400 | `{ "error": "Validation error" }`                              | Validation error |
+| 400 | `{ "error": "Invalid or expired code" }`                              | Invalid or expired code |
+| 500 | `{ "error": "Server error" }`                              | Server error |
 
 ---
 
@@ -98,13 +98,13 @@ Authenticates user by login and password. Returns JWT.
 
 **Responses:**
 
-| Code | Body | Description |
-|------|------|-------------|
-| 200 | `{ "token": "string" }` | Success |
-| 400 | `{ "error": "..." }` | Validation error |
-| 401 | `{ "error": "..." }` | Invalid login or password |
-| 403 | `{ "error": "..." }` | Account is not confirmed |
-| 500 | `{ "error": "..." }` | Server error |
+| Code | Body                                              | Description |
+|------|---------------------------------------------------|-------------|
+| 200 | `{ "token": "string", "refresh_token: "string" }` | Success |
+| 400 | `{ "error": "validation error" }`                 | Validation error |
+| 401 | `{ "error": "invalid login or password" }`        | Invalid login or password |
+| 403 | `{ "error": "account is not confirmed" }`         | Account is not confirmed |
+| 500 | `{ "error": "server error" }`                     | Server error |
 
 ---
 
@@ -116,11 +116,12 @@ Returns public account data by username.
 
 **Responses:**
 
-| Code | Body | Description |
-|------|------|-------------|
-| 200 | account object | Success |
-| 404 | `{ "error": "..." }` | Account not found |
-| 500 | `{ "error": "..." }` | Server error |
+| Code | Body                               | Description |
+|------|------------------------------------|-------------|
+| 200 | account object                     | Success |
+| 404 | `{ "error": "account not found" }` | Account not found |
+| 500 | `{ "error": "server error" }`      | Server error |
+| 400 | `{ "error": "validation error" }` | Validation error |
 
 **Response body (200):**
 ```json
@@ -148,19 +149,19 @@ Updates profile data of the authenticated user.
 ```json
 {
   "name": "string",
-  "bio": "string",
-  "avatar": "string"
+  "description": "string",
+  "avatar": "file"
 }
 ```
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Account updated |
-| 400 | Validation error |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                              | Description      |
+|------|-----------------------------------|------------------|
+| 200 | `{}`                              | Account updated  |
+| 400 | `{ "error": "validation error" }` | Validation error |
+| 401 | `{ "error": "Unauthorized" }`     | Unauthorized     |
+| 500 | `{ "error": "server error" }`     |  Server error    |
 
 ---
 
@@ -172,12 +173,12 @@ Soft deletes the account. Marks it as `deleted`, does not remove from database.
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Account deleted |
-| 400 | Validation error |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                              | Description      |
+|------|-----------------------------------|------------------|
+| 200 | `{}`                              | Account deleted  |
+| 400 | `{ "error": "validation error" }` | Validation error |
+| 401 | `{ "error": "Unauthorized" }`     | Unauthorized     |
+| 500 | `{ "error": "server error" }`     |  Server error    |
 
 ---
 
@@ -189,51 +190,59 @@ Follow a user. Increments follower count for target, following count for current
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Followed |
-| 400 | Already following / cannot follow yourself |
-| 401 | Unauthorized |
-| 404 | Account not found |
-| 500 | Server error |
+| Code | Body                                    | Description            |
+|------|-----------------------------------------|------------------------|
+| 200 | `{}`                                    | Followed               |
+| 400 | `{ "error": "already following" }`      | Already following      |
+| 400 | `{ "error": "cannot follow yourself" }` | cannot follow yourself |
+| 401 | `{ "error": "Unauthorized" }`           | Unauthorized           |
+| 404 | `{ "error": "account not found" }`      | Account not found      |
+| 500 | `{ "error": "server error" }`           |  Server error          |
 
 ---
 
 ### Unfollow `[JWT]`
 
-`OST /account/unfollow/:id`
+`POST /account/unfollow/:id`
 
 Unfollow a user. Decrements follower count for target, following count for current user.
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Unfollowed |
-| 400 | Not following |
-| 401 | Unauthorized |
-| 404 | Account not found |
-| 500 | Server error |
+| Code | Body | Description       |
+|------|-------|-------------------|
+| 200 | `{}`                               | Unfollowed        |
+| 400 | `{ "error": "not following" }`     | not following     |
+| 401 | `{ "error": "Unauthorized" }`      | Unauthorized      |
+| 404 | `{ "error": "account not found" }` | Account not found |
+| 500 | `{ "error": "server error" }`      | Server error      |
 
 ---
 
-### Change password `[JWT]`
+### Change password
 
 `POST /account/changepassword`
 
-Sends a confirmation code to the current email to initiate password change.
+Sends a confirmation code to the current email to initiate password change or reset.
+
+**Request body:**
+```json
+{
+  "mail": "string"
+}
+```
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Code sent to email |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | body                              | Description        |
+|------|-----------------------------------|--------------------|
+| 200 | `{}`                              | Code sent to email |
+| 400 | `{ "error": "validation error" }` | Validation error   |
+| 500 | `{ "error": "server error" }`     |  Server error      |
 
 ---
 
-### Confirm password change `[JWT]`
+### Confirm password change
 
 `POST /account/confirmchangepassword`
 
@@ -243,19 +252,19 @@ Verifies the code and updates the password.
 ```json
 {
   "code": "string",
-  "new_password": "string"
+  "new_password": "string",
+  "mail": "string"
 }
 ```
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Password updated |
-| 400 | Validation error |
-| 400 | Invalid or expired code |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                                   | Description             |
+|------|----------------------------------------|-------------------------|
+| 200 | `{}`                                   | Password updated        |
+| 400 | `{"error": "validation error"}`        | Validation error        |
+| 400 | `{"error": "invalid or expired code"}` | Invalid or expired code |
+| 500 | `{"error": "server error"}`            |  Server error           |
 
 ---
 
@@ -267,12 +276,12 @@ Sends a confirmation code to the current email to initiate email change.
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Code sent to current email |
-| 400 | Validation error |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                            | Description                |
+|------|---------------------------------|----------------------------|
+| 200 | `{}`                            | Code sent to current email |
+| 400 | `{"error": "validation error"}` | Validation error           |
+| 401 | `{"error": "Unauthorized"}`     | Unauthorized               |
+| 500 | `{"error": "server error"}`     |  Server error              |
 
 ---
 
@@ -285,7 +294,7 @@ Verifies the code from current email and updates to new email. Requires password
 **Request body:**
 ```json
 {
-  "mail": "string",
+  "new_ mail": "string",
   "code": "string",
   "password": "string"
 }
@@ -293,14 +302,14 @@ Verifies the code from current email and updates to new email. Requires password
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Email updated |
-| 400 | Validation error |
-| 400 | Invalid or expired code |
-| 401 | Invalid password |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                                  | Description             |
+|------|---------------------------------------|-------------------------|
+| 200 | `{}`                                  | Email updated           |
+| 400 | `{"error": "validation error"}`       | Validation error        |
+| 400 | `{"error": "invalid or expired code}` | Invalid or expired code |
+| 401 | `{"error": "invalid password}`        | Invalid password        |
+| 401 | `{"error": "Unauthorized}`            | Unauthorized            |
+| 500 | `{"error": "server error}`            |  Server error           |
 
 ---
 
@@ -312,9 +321,25 @@ Submits a request for a verified badge. Sent for admin review.
 
 **Responses:**
 
-| Code | Description |
-|------|-------------|
-| 200 | Request submitted |
-| 400 | Request already submitted |
-| 401 | Unauthorized |
-| 500 | Server error |
+| Code | Body                                     | Description               |
+|------|------------------------------------------|---------------------------|
+| 201  | `{}`                                     | Request submitted         |
+| 400  | `{"error": "request already submitted}`  | Request already submitted |
+| 400  | `{"error": "validation error"}`          | Validation error        |
+| 401  | `{"error": "Unauthorized}`               | Unauthorized              |
+| 500  | `{"error": "server error}`               |  Server error             |
+
+### delete all sessions `[JWT]`
+
+`DELETE /account/deletesessions`
+
+delete sessions from all devices
+
+**Responses**
+
+| Code | Body                            | Description                |
+|------ |---------------------------------|----------------------------|
+| 200 | `{}`                            | alss sessions closed       |
+| 400 | `{"error": "validation error"}` | Validation error           |
+| 401 | `{"error": "Unauthorized}`      | Unauthorized              |
+| 500 | `{"error": "server error}`      |  Server error             |

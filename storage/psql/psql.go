@@ -3,6 +3,7 @@ package psql
 import (
 	"Etog/internal/domain/entity"
 	"Etog/storage"
+	"context"
 	"errors"
 	"log/slog"
 	"time"
@@ -13,7 +14,8 @@ import (
 )
 
 type Storage struct {
-	db *gorm.DB
+	db  *gorm.DB
+	log *slog.Logger
 }
 
 func New(storagePath string, log *slog.Logger) *Storage {
@@ -25,7 +27,7 @@ func New(storagePath string, log *slog.Logger) *Storage {
 		panic(err)
 	}
 	log.Info("PostgreSQL run successfully\n")
-	return &Storage{db: db}
+	return &Storage{db: db, log: log}
 }
 
 func (s *Storage) ReturnDb() *gorm.DB {
@@ -75,126 +77,189 @@ func (s *Storage) DeleteMockEvent(id int) error {
 	return nil
 }
 
-func (s *Storage) CreateAccount(account entity.AccountDb) error {
-	result := s.db.Create(&account)
+func (s *Storage) CreateAccount(ctx context.Context, account *entity.AccountDb) (int, error) {
+	const op = "psql.CreateAccount"
+	log := s.log.With(slog.String("op", op))
+
+	result := s.db.WithContext(ctx).Create(account)
 	if result.Error != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(result.Error, &pgErr) {
-			if pgErr.Code == "23505" {
-				return storage.ErrAlreadyExists
-			}
+		if errors.As(result.Error, &pgErr) && pgErr.Code == "23505" {
+			return 409, errors.New("login or mail already exists")
 		}
-		return result.Error
+		log.Error(op+": ", result.Error)
+		return 500, errors.New("server error")
+	}
+	return 201, nil
+}
+
+func (s *Storage) GetAccount(ctx context.Context, id int) (*entity.AccountDb, int, error) {
+	const op = "psql.GetAccount"
+	log := s.log.With(slog.String("op", op))
+
+	var account entity.AccountDb
+	result := s.db.WithContext(ctx).Where("id = ?", id).First(&account)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, 404, storage.ErrNotFound
+		}
+		log.Error(op+": ", result.Error)
+		return nil, 500, errors.New("server error")
+	}
+	return &account, 200, nil
+}
+
+func (s *Storage) GetAccountByLogin(ctx context.Context, login string) (*entity.AccountDb, int, error) {
+	const op = "psql.GetAccountByLogin"
+	log := s.log.With(slog.String("op", op))
+
+	var account entity.AccountDb
+	result := s.db.WithContext(ctx).Where("login = ?", login).First(&account)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, 404, storage.ErrNotFound
+		}
+		log.Error(op+": ", result.Error)
+		return nil, 500, errors.New("server error")
+	}
+	return &account, 200, nil
+}
+
+func (s *Storage) GetAccountByEmail(ctx context.Context, email string) (*entity.AccountDb, int, error) {
+	const op = "psql.GetAccountByEmail"
+	log := s.log.With(slog.String("op", op))
+
+	var account entity.AccountDb
+	result := s.db.WithContext(ctx).Where("mail = ?", email).First(&account)
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, 404, storage.ErrNotFound
+		}
+		log.Error(op+": ", result.Error)
+		return nil, 500, errors.New("server error")
+	}
+	return &account, 200, nil
+}
+
+func (s *Storage) PutAccount(ctx context.Context, account entity.AccountDb) (int, error) {
+	const op = "psql.PutAccount"
+	log := s.log.With(slog.String("op", op))
+
+	if err := s.db.WithContext(ctx).Save(&account).Error; err != nil {
+		log.Error(op+": ", err)
+		return 500, errors.New("server error")
+	}
+	return 200, nil
+}
+
+func (s *Storage) CreateRefreshToken(ctx context.Context, token entity.RefreshToken) error {
+	const op = "psql.CreateRefreshToken"
+	log := s.log.With(slog.String("op", op))
+
+	if err := s.db.WithContext(ctx).Create(&token).Error; err != nil {
+		log.Error(op+": ", err)
+		return errors.New("server error")
 	}
 	return nil
 }
 
-func (s *Storage) GetAccount(id int) (*entity.AccountDb, error) {
-	var account entity.AccountDb
-	result := s.db.Where("id = ?", id).First(&account)
-	if result.Error != nil {
-		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
-			return nil, storage.ErrNotFound
-		}
-		return nil, result.Error
-	}
-	return &account, nil
-}
+func (s *Storage) GetRefreshToken(ctx context.Context, tokenId string) (*entity.RefreshToken, error) {
+	const op = "psql.GetRefreshToken"
+	log := s.log.With(slog.String("op", op))
 
-func (s *Storage) GetAccountByLogin(login string) (*entity.AccountDb, error) {
-	var account entity.AccountDb
-	result := s.db.Where("login = ?", login).First(&account)
-	if result.Error != nil {
-		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
-			return nil, storage.ErrNotFound
-		}
-		return nil, result.Error
-	}
-	return &account, nil
-}
-
-func (s *Storage) GetAccountByEmail(email string) (*entity.AccountDb, error) {
-	var account entity.AccountDb
-	result := s.db.Where("mail = ?", email).First(&account)
-	if result.Error != nil {
-		if errors.Is(gorm.ErrRecordNotFound, result.Error) {
-			return nil, storage.ErrNotFound
-		}
-		return nil, result.Error
-	}
-	return &account, nil
-}
-
-func (s *Storage) PutAccount(account entity.AccountDb) error {
-	result := s.db.Save(&account)
-	if result.Error != nil {
-		return result.Error
-	}
-	return nil
-}
-
-func (s *Storage) CreateRefreshToken(token entity.RefreshToken) error {
-	result := s.db.Create(&token)
-	if result.Error != nil {
-		return result.Error
-	}
-	return nil
-}
-
-func (s *Storage) GetRefreshToken(tokenId []byte) (*entity.RefreshToken, error) {
 	var refreshToken entity.RefreshToken
-	result := s.db.Where("token_id = ?", tokenId).First(&refreshToken)
+	result := s.db.WithContext(ctx).Where("token_id = ?", tokenId).First(&refreshToken)
 	if result.Error != nil {
-		return nil, result.Error
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, storage.ErrNotFound
+		}
+		log.Error(op+": ", result.Error)
+		return nil, errors.New("server error")
 	}
 	return &refreshToken, nil
 }
 
-func (s *Storage) DeleteRefreshToken(userId int) error {
-	result := s.db.Where("user_id = ?", userId).Delete(&entity.RefreshToken{})
+func (s *Storage) DeleteRefreshToken(ctx context.Context, userId int) (int, error) {
+	const op = "psql.DeleteRefreshToken"
+	log := s.log.With(slog.String("op", op))
+
+	result := s.db.WithContext(ctx).Where("user_id = ?", userId).Delete(&entity.RefreshToken{})
 	if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return result.Error
+		log.Error(op+": ", result.Error)
+		return 500, errors.New("server error")
+	}
+	return 200, nil
+}
+
+func (s *Storage) DeleteRefreshTokenByID(ctx context.Context, tokenId string) error {
+	const op = "psql.DeleteRefreshTokenByID"
+	log := s.log.With(slog.String("op", op))
+
+	result := s.db.WithContext(ctx).Where("token_id = ?", tokenId).Delete(&entity.RefreshToken{})
+	if result.Error != nil {
+		log.Error(op, "error", result.Error)
+		return errors.New("server error")
 	}
 	return nil
 }
 
-func (s *Storage) CreateOfficialRequest(id int) error {
-	result := s.db.Save(&entity.OfficialRequest{
+func (s *Storage) CreateOfficialRequest(ctx context.Context, id int) (int, error) {
+	const op = "psql.CreateOfficialRequest"
+	log := s.log.With(slog.String("op", op))
+
+	if err := s.db.WithContext(ctx).Save(&entity.OfficialRequest{
 		UserID:    id,
 		CreatedAt: time.Now(),
 		Comment:   nil,
-	})
-	return result.Error
+	}).Error; err != nil {
+		log.Error(op+": ", err)
+		return 500, errors.New("server error")
+	}
+	return 201, nil
 }
 
-func (s *Storage) Subscribe(id, follower int) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
+func (s *Storage) Subscribe(ctx context.Context, id, follower int) (int, error) {
+	const op = "psql.Subscribe"
+	log := s.log.With(slog.String("op", op))
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&entity.Subscribers{
 			AccountId:    id,
 			SubscriberId: follower,
 		}).Error; err != nil {
 			return err
 		}
-
-		if err := tx.Model(&entity.AccountDb{}).Where("id = ?", id).
-			UpdateColumn("followers", gorm.Expr("followers + ?", 1)).Error; err != nil {
-			return err
-		}
-
-		return nil
+		return tx.Model(&entity.AccountDb{}).
+			Where("id = ?", id).
+			UpdateColumn("followers", gorm.Expr("followers + ?", 1)).Error
 	})
+	if err != nil {
+		log.Error(op+": ", err)
+		return 500, errors.New("server error")
+	}
+	return 200, nil
 }
 
-func (s *Storage) Unsubscribe(id, follower int) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("account_id = ? AND subscriber_id = ?", id, follower).Delete(&entity.Subscribers{}).Error; err != nil {
-			return err
-		}
+func (s *Storage) Unsubscribe(ctx context.Context, id, follower int) (int, error) {
+	const op = "psql.Unsubscribe"
+	log := s.log.With(slog.String("op", op))
 
-		if err := tx.Model(&entity.AccountDb{}).Where("id = ?", id).
-			UpdateColumn("followers", gorm.Expr("followers - ?", 1)).Error; err != nil {
-			return err
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("account_id = ? AND subscriber_id = ?", id, follower).Delete(&entity.Subscribers{})
+		if result.Error != nil {
+			log.Error(op+": ", result.Error)
+			return errors.New("server error")
 		}
-		return nil
+		if result.RowsAffected == 0 {
+			return errors.New("not following")
+		}
+		return tx.Model(&entity.AccountDb{}).
+			Where("id = ?", id).
+			UpdateColumn("followers", gorm.Expr("followers - ?", 1)).Error
 	})
+	if err != nil {
+		log.Error(op+": ", err)
+		return 500, errors.New("server error")
+	}
+	return 200, nil
 }

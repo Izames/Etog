@@ -4,6 +4,7 @@ import (
 	"Etog/internal/domain/entity"
 	"Etog/storage"
 	"Etog/storage/psql"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,221 +14,203 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	accessTokenTTL  = time.Hour
+	refreshTokenTTL = 24 * 365 * time.Hour
+
+	claimSub = "sub"
+	claimExp = "exp"
+	claimJTI = "jti"
+	claimTyp = "typ"
+
+	tokenTypeRefresh = "refresh"
+)
+
+var (
+	ErrInvalidToken     = errors.New("invalid token")
+	ErrInvalidTokenType = errors.New("invalid token type")
 )
 
 type Jwt struct {
 	JwtKey  string
 	Storage *psql.Storage
+	parser  *jwt.Parser
 }
 
-func NewJwtLib(JwtKey string, storage *psql.Storage) *Jwt {
-	return &Jwt{JwtKey: JwtKey, Storage: storage}
+func NewJwtLib(jwtKey string, storage *psql.Storage) *Jwt {
+	return &Jwt{
+		JwtKey:  jwtKey,
+		Storage: storage,
+		parser:  jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()})),
+	}
+}
+
+func (j *Jwt) keyFunc(_ *jwt.Token) (interface{}, error) {
+	return []byte(j.JwtKey), nil
 }
 
 func (j *Jwt) CreateAccessToken(userId int) (string, error) {
 	claims := jwt.MapClaims{
-		"exp": time.Now().Add(time.Hour).Unix(),
-		"sub": userId,
+		claimExp: time.Now().Add(accessTokenTTL).Unix(),
+		claimSub: userId,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
 	tokenString, err := token.SignedString([]byte(j.JwtKey))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sign access token: %w", err)
 	}
 	return tokenString, nil
 }
 
-func (j *Jwt) CreateRefreshToken(userId int) (string, error) {
-	GenTokenID := uuid.New().String()
-	err := j.DeleteRefreshToken(userId)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return "", err
-	}
-	tokenID, err := bcrypt.GenerateFromPassword([]byte(GenTokenID), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
+func (j *Jwt) CreateRefreshToken(ctx context.Context, userId int) (string, error) {
+	tokenID := uuid.New().String()
 
 	refreshClaims := jwt.MapClaims{
-		"exp": time.Now().Add(24 * 365 * time.Hour).Unix(),
-		"sub": userId,
-		"jti": string(tokenID),
-		"typ": "refresh",
+		claimExp: time.Now().Add(refreshTokenTTL).Unix(),
+		claimSub: userId,
+		claimJTI: tokenID,
+		claimTyp: tokenTypeRefresh,
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
 
 	refreshTokenString, err := refreshToken.SignedString([]byte(j.JwtKey))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sign refresh token: %w", err)
 	}
-	err = j.Storage.CreateRefreshToken(entity.RefreshToken{
+
+	if err := j.Storage.CreateRefreshToken(ctx, entity.RefreshToken{
 		UserId:   userId,
 		TokenId:  tokenID,
-		ExpireAt: time.Now().Add(time.Hour * 24 * 365),
-	})
+		ExpireAt: time.Now().Add(refreshTokenTTL),
+	}); err != nil {
+		return "", fmt.Errorf("store refresh token: %w", err)
+	}
 
-	return refreshTokenString, err
+	return refreshTokenString, nil
+}
+
+func (j *Jwt) parseToken(tokenString string) (jwt.MapClaims, error) {
+	token, err := j.parser.Parse(tokenString, j.keyFunc)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	if !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+
+	return claims, nil
+}
+
+func extractUserId(claims jwt.MapClaims) (int, error) {
+	userIdF, ok := claims[claimSub].(float64)
+	if !ok {
+		return 0, ErrInvalidToken
+	}
+	return int(userIdF), nil
 }
 
 func (j *Jwt) CheckAccessToken(tokenString string) error {
-	keyFunc := func(_ *jwt.Token) (interface{}, error) {
-		return []byte(j.JwtKey), nil
-	}
-
-	token, err := jwt.Parse(tokenString, keyFunc)
-	if err != nil {
-		return err
-	}
-
-	if !token.Valid {
-		return fmt.Errorf("invalid token")
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return fmt.Errorf("invalid token")
-	}
-
-	expFloat, ok := claims["exp"].(float64)
-	if !ok {
-		return fmt.Errorf("invalid token")
-	}
-
-	exp := int64(expFloat)
-
-	if time.Now().After(time.Unix(exp, 0)) {
-		return fmt.Errorf("invalid token")
-	}
-
-	return nil
+	_, err := j.parseToken(tokenString)
+	return err
 }
 
-// return new access token
-func (j *Jwt) RefreshToken(refreshTokenString string) (error, string) {
-	keyFunc := func(_ *jwt.Token) (interface{}, error) {
-		return []byte(j.JwtKey), nil
-	}
-
-	token, err := jwt.Parse(refreshTokenString, keyFunc, jwt.WithExpirationRequired())
+func (j *Jwt) RefreshToken(ctx context.Context, refreshTokenString string) (string, error) {
+	claims, err := j.parseToken(refreshTokenString)
 	if err != nil {
-		return err, ""
+		return "", err
 	}
 
-	if !token.Valid {
-		return fmt.Errorf("invalid refresh token"), ""
+	typ, ok := claims[claimTyp].(string)
+	if !ok || typ != tokenTypeRefresh {
+		return "", ErrInvalidTokenType
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
+	tokenId, ok := claims[claimJTI].(string)
 	if !ok {
-		return fmt.Errorf("invalid refresh token"), ""
+		return "", ErrInvalidToken
 	}
 
-	expFloat, ok := claims["exp"].(float64)
-	if !ok {
-		return fmt.Errorf("invalid refresh token"), ""
-	}
-
-	exp := int64(expFloat)
-
-	if time.Now().After(time.Unix(exp, 0)) {
-		return fmt.Errorf("invalid refresh token"), ""
-	}
-
-	tokenId, ok := claims["jti"].(string)
-	if !ok {
-		return fmt.Errorf("invalid refresh token"), ""
-	}
-
-	tokenId_byte := []byte(tokenId)
-
-	_, err = j.Storage.GetRefreshToken(tokenId_byte)
+	userId, err := extractUserId(claims)
 	if err != nil {
-		return fmt.Errorf("invalid refresh token"), ""
+		return "", err
 	}
-	newToken, err := j.CreateAccessToken(int(claims["sub"].(float64)))
 
-	return nil, newToken
+	if _, err := j.Storage.GetRefreshToken(ctx, tokenId); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return "", ErrInvalidToken
+		}
+		return "", fmt.Errorf("get refresh token: %w", err)
+	}
+
+	newAccessToken, err := j.CreateAccessToken(userId)
+	if err != nil {
+		return "", err
+	}
+
+	return newAccessToken, nil
 }
 
-func (j *Jwt) DeleteRefreshToken(userId int) error {
-	err := j.Storage.DeleteRefreshToken(userId)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (j *Jwt) TokensGenerate(userId int) (string, string, error) {
-	token, err := j.CreateAccessToken(userId)
+func (j *Jwt) TokensGenerate(ctx context.Context, userId int) (string, string, error) {
+	accessToken, err := j.CreateAccessToken(userId)
 	if err != nil {
 		return "", "", err
 	}
 
-	refreshToken, err := j.CreateRefreshToken(userId)
+	refreshToken, err := j.CreateRefreshToken(ctx, userId)
 	if err != nil {
 		return "", "", err
 	}
 
-	return token, refreshToken, nil
+	return accessToken, refreshToken, nil
 }
 
 func (j *Jwt) JWTAuth() gin.HandlerFunc {
-	return func(context *gin.Context) {
-		authHeader := context.GetHeader("Authorization")
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			context.JSON(http.StatusUnauthorized, gin.H{"error": "Token is required"})
-			context.Abort()
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token is required"})
+			c.Abort()
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
+		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			context.JSON(http.StatusUnauthorized, gin.H{
-				"error": "invalid authorization header",
-			})
-			context.Abort()
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header"})
+			c.Abort()
 			return
 		}
 
-		tokenString := parts[1]
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(j.JwtKey), nil
-		})
+		claims, err := j.parseToken(parts[1])
 		if err != nil {
-			context.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-			context.Abort()
-			return
-		}
-		if !token.Valid {
-			context.JSON(http.StatusUnauthorized, gin.H{"error": "Token is invalid"})
-			context.Abort()
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "token is invalid or expired"})
+			c.Abort()
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			context.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			context.Abort()
+		if typ, ok := claims[claimTyp].(string); ok && typ == tokenTypeRefresh {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token type"})
+			c.Abort()
 			return
 		}
 
-		userIdF := claims["sub"].(float64)
-		userId := int(userIdF)
-		if userId == 0 {
-			context.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
-			context.Abort()
+		userId, err := extractUserId(claims)
+		if err != nil || userId == 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.Abort()
 			return
 		}
 
-		context.Set("userId", userId)
-
-		context.Next()
+		c.Set("userId", userId)
+		c.Next()
 	}
 }

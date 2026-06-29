@@ -16,12 +16,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"net/http"
 	"net/mail"
-	"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +31,7 @@ type AuthService struct {
 	S3       *s3.S3
 }
 
-func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Logger, mailConf *config.MailData, jwt *jwt.Jwt) *AuthService {
+func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Logger, mailConf *config.MailData, jwt *jwt.Jwt, s3 *s3.S3) *AuthService {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -44,24 +41,25 @@ func NewAuthService(storage *psql.Storage, rStorage *redis.RedisDb, log *slog.Lo
 		log:      log,
 		MailConf: mailConf,
 		Jwt:      jwt,
+		S3:       s3,
 	}
 }
 
-func (a *AuthService) Registration(req *account_dto.RegReq) (error, int) {
+func (a *AuthService) Registration(ctx context.Context, req *account_dto.RegReq) (int, error) {
 	const op = "services.Registration"
 
 	log := a.log.With(slog.String("op", op))
 
 	if req.Login == "" || req.Password == "" || req.Mail == "" {
-		return errors.New("please provide login, password and mail"), 400
+		return 400, errors.New("validation error")
 	}
 
 	if len(req.Password) < 7 {
-		return errors.New("password must be at least 8 characters"), 400
+		return 400, errors.New("validation error")
 	}
 	_, err := mail.ParseAddress(req.Mail)
 	if err != nil {
-		return errors.New("invalid mail address"), 400
+		return 400, errors.New("validation error")
 	}
 
 	account := &entity.AccountDb{
@@ -76,229 +74,252 @@ func (a *AuthService) Registration(req *account_dto.RegReq) (error, int) {
 		Followers:   0,
 	}
 
+	_, code, err := a.Storage.GetAccountByLogin(ctx, req.Login)
+	if err == nil {
+		return 409, errors.New("login already taken")
+	}
+	if code == 500 {
+		return 500, errors.New("server error")
+	}
+	_, code, err = a.Storage.GetAccountByEmail(ctx, req.Mail)
+	if err == nil {
+		return 409, errors.New("mail already taken")
+	}
+	if code == 500 {
+		return 500, errors.New("server error")
+	}
+
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(account.Password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Error("Error generating hash password")
-		return errors.New("internal server error"), 500
+		return 500, errors.New("internal server error")
 
 	}
 	account.Password = string(hashPass)
 
-	err = a.Storage.CreateAccount(*account)
-	if err != nil {
-		if errors.Is(err, storage.ErrAlreadyExists) {
-			a.log.Error("AccountDb already exists " + account.Mail)
-			return errors.New("account_dto already exists"), 409
-		} else {
-			a.log.Error("Error creating account_dto: " + err.Error())
-			return errors.New("internal server error"), 500
-		}
-	}
-	return nil, 200
+	return a.Storage.CreateAccount(ctx, account)
 }
 
-func (a *AuthService) SendCode(ctx context.Context, email string) (error, int) {
+func (a *AuthService) SendCode(ctx context.Context, email string, theme, description string) (int, error) {
 	const op = "services.SendCode"
 	log := a.log.With(slog.String("op", op))
 	code, err := a.RStorage.Get(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
-			code1 := rand.Intn(10)
-			code2 := rand.Intn(10)
-			code3 := rand.Intn(10)
-			code4 := rand.Intn(10)
-			code5 := rand.Intn(10)
-			code6 := rand.Intn(10)
-			code = strconv.Itoa(code1) + strconv.Itoa(code2) + strconv.Itoa(code3) + strconv.Itoa(code4) + strconv.Itoa(code5) + strconv.Itoa(code6)
+			code = fmt.Sprintf("%06d", rand.Intn(1000000))
 		} else {
 			log.Error("Error getting code: " + err.Error())
-			return errors.New("internal server error"), 500
+			return 500, errors.New("server error")
 		}
 	}
-	err = mail2.SendMail(*a.MailConf, email, fmt.Sprintf("ваш код для подтверждения почты: %s", code), "confirmation code")
+	err = mail2.SendMail(*a.MailConf, email, fmt.Sprintf("%s: %s", description, code), theme)
 	if err != nil {
 		log.Error("Error sending code: " + err.Error())
-		return errors.New("internal server error"), 500
+		return 500, errors.New("server error")
 	}
 	err = a.RStorage.Put(ctx, email, code, time.Minute*5)
 	if err != nil {
 		log.Error("Error putting code: " + err.Error())
-		return errors.New("internal server error"), 500
+		return 500, errors.New("server error")
 	}
 
-	return nil, 200
+	return 200, nil
 
 }
 
-func (a *AuthService) ConfirmCode(ctx context.Context, request account_dto.ConfirmCodeRequest) (error, int, string, string) {
+func (a *AuthService) ConfirmCode(ctx context.Context, request account_dto.ConfirmCodeRequest) (int, string, string, error) {
 	const op = "services.ConfirmCode"
 	log := a.log.With(slog.String("op", op))
 
 	codeToCheck, err := a.RStorage.Get(ctx, request.Email)
 	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return 400, "", "", errors.New("code not found or expired")
+		}
 		log.Error("Error getting code: " + err.Error())
-		return errors.New("internal server error"), 500, "", ""
+		return 500, "", "", errors.New("server error")
 	}
 	if codeToCheck != request.Code {
-		return errors.New("invalid code"), 400, "", ""
+		return 400, "", "", errors.New("invalid or expired code")
 	}
-	account, err := a.Storage.GetAccountByEmail(request.Email)
+	account, code, err := a.Storage.GetAccountByEmail(ctx, request.Email)
 	if err != nil {
-		log.Error("Error getting account_dto: " + err.Error())
-		return errors.New("internal server error"), 500, "", ""
+		return code, "", "", err
 	}
 	account.Active = true
-	err = a.Storage.PutAccount(*account)
+	code, err = a.Storage.PutAccount(ctx, *account)
 	if err != nil {
-		log.Error("Error putting account_dto: " + err.Error())
-		return errors.New("internal server error"), 500, "", ""
+		return code, "", "", err
 	}
 
-	token, refreshToken, err := a.Jwt.TokensGenerate(account.Id)
+	token, refreshToken, err := a.Jwt.TokensGenerate(ctx, account.Id)
 	if err != nil {
 		log.Error("Error generating token: " + err.Error())
-		return errors.New("internal server error"), 500, "", ""
+		return 500, "", "", errors.New("server error")
 	}
 	_ = a.RStorage.Delete(ctx, request.Email)
-	return nil, 200, token, refreshToken
+	return 200, token, refreshToken, nil
 }
 
-func (a *AuthService) Authenticate(auth account_dto.AuthRequest) (string, string, error, int) {
-	account, err := a.Storage.GetAccountByLogin(auth.Login)
+func (a *AuthService) Authenticate(ctx context.Context, auth account_dto.AuthRequest) (string, string, int, error) {
+	account, code, err := a.Storage.GetAccountByLogin(ctx, auth.Login)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return "", "", errors.New("account_dto not found"), 404
-		}
-		return "", "", errors.New("internal server error"), 500
+		return "", "", code, err
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(auth.Password)); err != nil {
-		return "", "", errors.New("password incorrect"), 400
-	}
 	if !account.Active {
-		return "", "", errors.New("email is not active"), 401
+		return "", "", 403, errors.New("account is not confirmed")
 	}
-	token, refreshToken, err := a.Jwt.TokensGenerate(account.Id)
+	if err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(auth.Password)); err != nil {
+		return "", "", 401, errors.New("invalid login or password")
+	}
+	token, refreshToken, err := a.Jwt.TokensGenerate(ctx, account.Id)
 	if err != nil {
-		return "", "", err, 500
+		return "", "", 500, errors.New("server error")
 	}
-	return token, refreshToken, nil, 200
+	return token, refreshToken, 200, nil
 }
 
-func (a *AuthService) ChangeData(account account_dto.ChangeDataRequest, ctx context.Context) (error, int) {
-	UserId := ctx.Value("UserId").(int)
-
-	accountDb, err := a.Storage.GetAccount(UserId)
+func (a *AuthService) ChangeData(ctx context.Context, id int, account account_dto.ChangeDataRequest) (int, error) {
+	accountDb, code, err := a.Storage.GetAccount(ctx, id)
 	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			a.log.Error("AccountDb not found")
-			return errors.New("account_dto not found"), 404
+		return code, err
+	}
+
+	if account.File != nil {
+		url, err := a.S3.Upload(account.File, "user-avatar/")
+		if err != nil {
+			a.log.Error("Error uploading file: " + err.Error())
+			return 500, errors.New("server error")
 		}
-		a.log.Error("Error getting account_dto: " + err.Error())
-		return errors.New("internal server error"), 500
+		accountDb.Avatar = url
 	}
-
-	url, err := a.S3.Upload(account.File, "user-avatar/")
-
-	if err != nil {
-		a.log.Error("Error uploading file: " + err.Error())
-		return errors.New("internal server error"), 500
-	}
-
-	accountDb.Avatar = url
 
 	accountDb.Description = account.Description
 
-	err = a.Storage.PutAccount(*accountDb)
+	code, err = a.Storage.PutAccount(ctx, *accountDb)
 	if err != nil {
-		a.log.Error("Error putting account_dto: " + err.Error())
+		return code, err
 	}
 
-	return nil, 200
+	return 200, nil
 }
-
-func (a *AuthService) GetAccount(ctx *gin.Context, login string, id int) (int, *entity.Account, error) {
+func (a *AuthService) GetAccount(ctx context.Context, login string, id int) (int, *entity.Account, error) {
 	var account *entity.AccountDb
 	var err error
+	var code int
 	if id != -1 {
-		account, err = a.Storage.GetAccount(id)
+		account, code, err = a.Storage.GetAccount(ctx, id)
 		if err != nil {
-			a.log.Error("Error getting account_dto: " + err.Error())
-			return http.StatusInternalServerError, nil, errors.New("internal server error")
+			return code, nil, err
 		}
 	} else if login != "" {
-		account, err = a.Storage.GetAccountByLogin(login)
+		account, code, err = a.Storage.GetAccountByLogin(ctx, login)
 		if err != nil {
-			a.log.Error("Error getting account_dto: " + err.Error())
-			return http.StatusInternalServerError, nil, errors.New("internal server error")
+			return code, nil, err
 		}
 	} else {
-		return 400, nil, errors.New("wrong data")
+		return 400, nil, errors.New("validation error")
 	}
-	if account == nil {
-		return http.StatusNotFound, nil, errors.New("account_dto not found")
-	}
+
 	if !account.Active || account.Deleted {
-		return http.StatusNotFound, nil, errors.New("account_dto not found")
+		return 404, nil, errors.New("account not found")
 	}
-	return http.StatusOK, repo.FromDbUser(account), nil
+	return 200, repo.FromDbUser(account), nil
 }
 
-func (a *AuthService) DeleteAccount(ctx *gin.Context, id int) (int, error) {
-	account, err := a.Storage.GetAccount(id)
+func (a *AuthService) DeleteAccount(ctx context.Context, id int) (int, error) {
+	account, code, err := a.Storage.GetAccount(ctx, id)
 	if err != nil {
-		a.log.Error("Error getting account_dto: " + err.Error())
-		return http.StatusInternalServerError, errors.New("internal server error")
+		return code, err
+	}
+	if account.Deleted {
+		return 404, errors.New("account not found")
 	}
 	account.Deleted = true
-	if err = a.Storage.PutAccount(*account); err != nil {
-		a.log.Error("Error putting account_dto: " + err.Error())
-		return http.StatusInternalServerError, errors.New("internal server error")
-	}
-	return http.StatusOK, nil
-}
-
-func (a *AuthService) RequestOfficial(ctx *gin.Context, id int) error {
-	return a.Storage.CreateOfficialRequest(id)
-}
-
-func (a *AuthService) Subscribe(ctx *gin.Context, following int, follower int) error {
-	if err := a.Storage.Subscribe(following, follower); err != nil {
-		a.log.Error("Error subscribing to follower: " + err.Error())
-		return errors.New("internal server error")
-	}
-	return nil
-}
-
-func (a *AuthService) Unsubscribe(ctx *gin.Context, following int, follower int) error {
-	if err := a.Storage.Unsubscribe(following, follower); err != nil {
-		a.log.Error("Error unsubscribing from follower: " + err.Error())
-		return errors.New("internal server error")
-	}
-	return nil
-}
-
-func (a *AuthService) ChangePasword(ctx *gin.Context, id int, oldPassword string, newPassword string) error {
-	account, err := a.Storage.GetAccount(id)
+	code, err = a.Storage.PutAccount(ctx, *account)
 	if err != nil {
-		a.log.Error("Error getting account_dto: " + err.Error())
-		return errors.New("internal server error")
+		return code, err
+	}
+	return 200, nil
+}
+
+func (a *AuthService) Follow(ctx context.Context, followerId, followingId int) (int, error) {
+	if followerId == followingId {
+		return 400, errors.New("cannot follow yourself")
+	}
+	return a.Storage.Subscribe(ctx, followingId, followerId)
+}
+
+func (a *AuthService) Unfollow(ctx context.Context, followerId, followingId int) (int, error) {
+	return a.Storage.Unsubscribe(ctx, followingId, followerId)
+}
+
+func (a *AuthService) ConfirmChangePassword(ctx context.Context, mail string, code string, newPass string) (int, error) {
+	const op = "AuthService.ConfirmChangePassword"
+
+	log := a.log.With(slog.String("op", op))
+	if newPass == "" || len(newPass) < 7 {
+		return 400, errors.New("validation error")
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(oldPassword)); err != nil {
-		a.log.Error("Old password incorrect")
-		return errors.New("Old password incorrect")
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	account, responseCode, err := a.Storage.GetAccountByEmail(ctx, mail)
 	if err != nil {
-		a.log.Error("Error hashing password: " + err.Error())
-		return errors.New("internal server error")
+		return responseCode, err
 	}
-	account.Password = string(hash)
-	if err = a.Storage.PutAccount(*account); err != nil {
-		a.log.Error("Error putting account_dto: " + err.Error())
-		return errors.New("internal server error")
+	codeToCheck, err := a.RStorage.Get(ctx, account.Mail)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return 400, errors.New("expired or invalid code")
+		}
+		log.Error("Error getting code: " + err.Error())
+		return 500, errors.New("server error")
 	}
-	return nil
+	if codeToCheck != code {
+		return 400, errors.New("invalid or expired code")
+	}
+
+	hashPass, err := bcrypt.GenerateFromPassword([]byte(newPass), bcrypt.DefaultCost)
+	if err != nil {
+		log.Error("Error generating password: " + err.Error())
+		return 500, errors.New("server error")
+	}
+	account.Password = string(hashPass)
+
+	return a.Storage.PutAccount(ctx, *account)
+}
+
+func (a *AuthService) ConfirmChangeMail(ctx context.Context, id int, newMail string, code string, password string) (int, error) {
+	const op = "AuthService.ConfirmChangeMail"
+	log := a.log.With(slog.String("op", op))
+
+	account, responseCode, err := a.Storage.GetAccount(ctx, id)
+	if err != nil {
+		return responseCode, err
+	}
+	codeToCheck, err := a.RStorage.Get(ctx, account.Mail)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return 400, errors.New("expired or invalid code")
+		}
+		log.Error("Error getting code: " + err.Error())
+		return 500, errors.New("server error")
+	}
+	if codeToCheck != code {
+		return 400, errors.New("invalid or expired code")
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(password))
+	if err != nil {
+		return 401, errors.New("invalid password")
+	}
+	account.Mail = newMail
+	return a.Storage.PutAccount(ctx, *account)
+}
+
+func (a *AuthService) RequestOfficial(ctx context.Context, id int) (int, error) {
+	return a.Storage.CreateOfficialRequest(ctx, id)
+}
+
+func (a *AuthService) DeleteSessions(ctx context.Context, id int) (int, error) {
+	return a.Storage.DeleteRefreshToken(ctx, id)
 }

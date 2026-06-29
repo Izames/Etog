@@ -9,6 +9,7 @@ import (
 	"Etog/internal/worker"
 	"Etog/storage/psql"
 	"Etog/storage/redis"
+	s4 "Etog/storage/s3"
 	"context"
 	"fmt"
 	"log/slog"
@@ -33,7 +34,12 @@ func main() {
 		conf.Db.Sslmode), log)
 	redisDb := redis.NewRedisDb(conf.RedisDb, log)
 	jwt := jwt2.NewJwtLib(conf.JWTKey, database)
-	authService := services.NewAuthService(database, redisDb, log, &conf.MailData, jwt)
+	s3, err := s4.NewS3(&conf.S3)
+	if err != nil {
+		log.Error("Failed to create S3 object")
+		os.Exit(1)
+	}
+	authService := services.NewAuthService(database, redisDb, log, &conf.MailData, jwt, s3)
 	accountHandler := handlers.NewAccountHandler(log, authService)
 	mockHandler := handlers.NewMockEventHandler(log, database)
 
@@ -59,11 +65,20 @@ func main() {
 
 	rAccount.POST("/register", accountHandler.Registration)
 	rAccount.POST("/auth", accountHandler.Authenticate)
-	rAccount.POST("/sendCode", accountHandler.GetCode)
+	rAccount.POST("/sendCode", accountHandler.SendCode)
 	rAccount.POST("/confirmCode", accountHandler.ConfirmCode)
+	rAccount.GET("/getAccount/:query", accountHandler.GetAccountByLoginOrId)
+	rAccount.POST("/changepassword", accountHandler.ChangePassword)
+	rAccount.POST("/confirmchangepassword", accountHandler.ConfirmChangePassword)
+	rAccount.POST("/changeemail", accountHandler.ChangeMail)
+	rAccount.POST("confirmchangeemail", accountHandler.ConfirmMail)
 	rAccount.Use(jwt.JWTAuth())
-	rAccount.GET("/getAccount", accountHandler.GetAccountByLogin)
 	rAccount.POST("/changeData", accountHandler.ChangeData)
+	rAccount.DELETE("/delete", accountHandler.DeleteAccount)
+	rAccount.POST("/follow/:int", accountHandler.Subscribe)
+	rAccount.POST("/unfollow/:int", accountHandler.Unsubscribe)
+	rAccount.POST("/requestverification", accountHandler.RequestOfficial)
+	rAccount.DELETE("/deletesessions", accountHandler.DeleteSessions)
 
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%s", conf.Port),

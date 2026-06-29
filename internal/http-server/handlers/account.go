@@ -5,7 +5,6 @@ import (
 	"Etog/internal/domain/entity/DTO/account_dto"
 	"Etog/internal/http-server/services"
 	"log/slog"
-	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -29,21 +28,14 @@ func NewAccountHandler(log *slog.Logger, service *services.AuthService) AccountH
 func (a *AccountHandler) Registration(ctx *gin.Context) {
 	var account account_dto.RegReq
 
-	if ctx.ContentType() != "application/json" {
-		ctx.JSON(400, gin.H{
-			"error": "Content-Type must be 'application/json'",
-		})
-		return
-	}
-
 	if err := ctx.ShouldBindJSON(&account); err != nil {
 		ctx.JSON(400, gin.H{
-			"error": "Invalid JSON: " + err.Error(),
+			"error": "Validation error",
 		})
 		return
 	}
 
-	err, code := a.service.Registration(&account)
+	code, err := a.service.Registration(ctx, &account)
 	if err != nil {
 		ctx.JSON(code, gin.H{
 			"error": err.Error(),
@@ -51,21 +43,21 @@ func (a *AccountHandler) Registration(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(201, gin.H{
-		"message": "AccountDb created",
+		"message": "Account created, confirmation code sent to email",
 	})
 }
 
-func (a *AccountHandler) GetCode(ctx *gin.Context) {
+func (a *AccountHandler) SendCode(ctx *gin.Context) {
 	type mail struct {
 		Mail string `json:"mail"`
 	}
 	email := mail{}
 	err := ctx.ShouldBindJSON(&email)
 	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	err, code := a.service.SendCode(ctx, email.Mail)
+	code, err := a.service.SendCode(ctx, email.Mail, "confirmation code", "ваш код для подтверждения почты")
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
@@ -77,11 +69,11 @@ func (a *AccountHandler) GetCode(ctx *gin.Context) {
 func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
 	var confirmCode account_dto.ConfirmCodeRequest
 	if err := ctx.ShouldBindJSON(&confirmCode); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
 
-	err, code, token, refreshToken := a.service.ConfirmCode(ctx, confirmCode)
+	code, token, refreshToken, err := a.service.ConfirmCode(ctx, confirmCode)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
@@ -97,10 +89,10 @@ func (a *AccountHandler) ConfirmCode(ctx *gin.Context) {
 func (a *AccountHandler) Authenticate(ctx *gin.Context) {
 	var DTOAccount account_dto.AuthRequest
 	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	token, refreshToken, err, code := a.service.Authenticate(DTOAccount)
+	token, refreshToken, code, err := a.service.Authenticate(ctx, DTOAccount)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
@@ -113,17 +105,17 @@ func (a *AccountHandler) Authenticate(ctx *gin.Context) {
 
 func (a *AccountHandler) ChangeData(ctx *gin.Context) {
 	var DTOAccount account_dto.ChangeDataRequest
-	if err := ctx.ShouldBindJSON(&DTOAccount); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
+	id := ctx.GetInt("userId")
+	if err := ctx.ShouldBind(&DTOAccount); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
 	fileHeader, err := ctx.FormFile("avatar")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	if err == nil {
+		DTOAccount.Avatar = fileHeader.Filename
+		DTOAccount.File = fileHeader
 	}
-	DTOAccount.Avatar = fileHeader.Filename
-	err, code := a.service.ChangeData(DTOAccount, ctx)
+	code, err := a.service.ChangeData(ctx, id, DTOAccount)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
@@ -131,129 +123,159 @@ func (a *AccountHandler) ChangeData(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-func (a *AccountHandler) GetAccountByLogin(ctx *gin.Context) {
-	type GetRequest struct {
-		Login string `json:"login"`
-		Id    int    `json:"id"`
-	}
-	var getRequest GetRequest
-	if err := ctx.ShouldBindJSON(&getRequest); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-		return
-	}
-
-	code, account, err := a.service.GetAccount(ctx, getRequest.Login, getRequest.Id)
+func (a *AccountHandler) GetAccountByLoginOrId(ctx *gin.Context) {
+	query := ctx.Param("query")
+	id, err := strconv.Atoi(query)
 	if err != nil {
-		ctx.JSON(code, gin.H{"error": err})
+		code, account, err := a.service.GetAccount(ctx, query, -1)
+		if err != nil {
+			ctx.JSON(code, gin.H{"error": err.Error()})
+			return
+		}
+		ctx.JSON(code, *account)
+	}
+	code, account, err := a.service.GetAccount(ctx, query, id)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(code, *account)
 }
 
 func (a *AccountHandler) DeleteAccount(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
-		return
-	}
+	id := ctx.GetInt("userId")
 	code, err := a.service.DeleteAccount(ctx, id)
 	if err != nil {
-		ctx.JSON(code, gin.H{"error": err})
+		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(200, gin.H{})
 }
 
-func (a *AccountHandler) RequestOfficial(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
-		return
-	}
-	if err = a.service.RequestOfficial(ctx, id); err != nil {
-		ctx.JSON(500, gin.H{"error": "internal server error"})
-		return
-	}
-	ctx.JSON(200, gin.H{})
-}
+//func (a *AccountHandler) RequestOfficial(ctx *gin.Context) {
+//	id, err := strconv.Atoi(ctx.Param("id"))
+//	if err != nil {
+//		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+//		return
+//	}
+//	if err = a.service.RequestOfficial(ctx, id); err != nil {
+//		ctx.JSON(500, gin.H{"error": "internal server error"})
+//		return
+//	}
+//	ctx.JSON(200, gin.H{})
+//}
 
 func (a *AccountHandler) Subscribe(ctx *gin.Context) {
-	follower, err := strconv.Atoi(ctx.Param("id"))
+	follower := ctx.GetInt("userId")
+	followingStr := ctx.Param("userId")
+	followingId, err := strconv.Atoi(followingStr)
 	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid token: " + err.Error()})
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	type SubscribeRequest struct {
-		Following int `json:"following"`
-	}
-	var subscribeRequest SubscribeRequest
-	if err = ctx.ShouldBindJSON(&subscribeRequest); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-		return
-	}
-	if err = a.service.Subscribe(ctx, subscribeRequest.Following, follower); err != nil {
-		ctx.JSON(400, gin.H{"error": "internal server error"})
+	code, err := a.service.Follow(ctx, follower, followingId)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(200, gin.H{})
 }
 
 func (a *AccountHandler) Unsubscribe(ctx *gin.Context) {
-	follower, err := strconv.Atoi(ctx.Param("id"))
+	follower := ctx.GetInt("userId")
+	followingStr := ctx.Param("userId")
+	followingId, err := strconv.Atoi(followingStr)
 	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
+		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	type UnsubscribeRequest struct {
-		Following int `json:"following"`
-	}
-	var unsubscribeRequest UnsubscribeRequest
-	if err = ctx.ShouldBindJSON(&unsubscribeRequest); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-		return
-	}
-	if err = a.service.Unsubscribe(ctx, follower, unsubscribeRequest.Following); err != nil {
-		ctx.JSON(400, gin.H{"error": "internal server error"})
+	code, err := a.service.Unfollow(ctx, follower, followingId)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(200, gin.H{})
 }
 
 func (a *AccountHandler) ChangePassword(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+	type mail struct {
+		Mail string `json:"mail"`
+	}
+	var email mail
+	if err := ctx.ShouldBindJSON(&email); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
+	}
+	code, err := a.service.SendCode(ctx, email.Mail, "change password code", "код для смены пароля")
 	if err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
-		return
-	}
-	var reqDto account_dto.ChangePassRequest
-	if err = ctx.ShouldBindJSON(&reqDto); err != nil {
-		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-		return
-	}
-	if err = a.service.ChangePasword(ctx, id, reqDto.OldPassword, reqDto.NewPassword); err != nil {
-		ctx.JSON(400, gin.H{"error": "internal server error"})
+		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
 	}
 	ctx.JSON(200, gin.H{})
 }
 
-//func (a *AccountHandler) ChangeMail(ctx *gin.Context) {
-//	type GetRequest struct {
-//		NewMail string `json:"mail"`
-//		Code    string `json:"code"`
-//	}
-//	id, err := strconv.Atoi(ctx.Param("id"))
-//	if err != nil {
-//		ctx.JSON(400, gin.H{"error": "Invalid ID: " + err.Error()})
-//		return
-//
-//	}
-//	var getRequest GetRequest
-//	if err = ctx.ShouldBindJSON(&getRequest); err != nil {
-//		ctx.JSON(400, gin.H{"error": "Invalid JSON: " + err.Error()})
-//		return
-//	}
-//
-//}
+func (a *AccountHandler) ConfirmChangePassword(ctx *gin.Context) {
+	var confirmPassReq account_dto.ChangePassRequest
+	if err := ctx.ShouldBind(&confirmPassReq); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
+	}
+	code, err := a.service.ConfirmChangePassword(ctx, confirmPassReq.Mail, confirmPassReq.Code, confirmPassReq.NewPassword)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
 
-//восстановить пароль
+func (a *AccountHandler) ChangeMail(ctx *gin.Context) {
+	type mail struct {
+		Mail string `json:"mail"`
+	}
+	var email mail
+	if err := ctx.ShouldBindJSON(&email); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
+	}
+	code, err := a.service.SendCode(ctx, email.Mail, "change email", "ваш код для смены почты")
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+func (a *AccountHandler) ConfirmMail(ctx *gin.Context) {
+	id := ctx.GetInt("userId")
+	var confirmPassReq account_dto.ConfirmEmailRequest
+	if err := ctx.ShouldBind(&confirmPassReq); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
+	}
+	code, err := a.service.ConfirmChangeMail(ctx, id, confirmPassReq.NewMail, confirmPassReq.Code, confirmPassReq.Password)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+func (a *AccountHandler) RequestOfficial(ctx *gin.Context) {
+	id := ctx.GetInt("userId")
+	code, err := a.service.RequestOfficial(ctx, id)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
+
+func (a *AccountHandler) DeleteSessions(ctx *gin.Context) {
+	id := ctx.GetInt("userId")
+	code, err := a.service.DeleteSessions(ctx, id)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(200, gin.H{})
+}
