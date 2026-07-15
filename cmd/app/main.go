@@ -110,13 +110,6 @@ func main() {
 	} else {
 		log.Info("Server gracefully shutdown")
 	}
-	//
-	//TODO: Сделать документацию для конфига
-	//TODO: сделать обращения к базе данных
-	//TODO: создать запросы для апи
-	//TODO: создать бизнес-логику для выполнения АПИ
-	//TODO: связать все
-	//TODO: изучить тестирование и пройтись им по всему проекту
 }
 
 func NewLogger(env string) *slog.Logger {

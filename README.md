@@ -1,4 +1,4 @@
-<h1>Migrator:</h1>
+ <h1>Migrator:</h1>
 <h2>Migrator flags:</h2>
 <ul>
   <li>--conn-str="" [connect-string to database]</li>
@@ -154,3 +154,15 @@
   <li>400 — validation error (e.g. request already submitted)</li>
   <li>500 — server error</li>
 </ul>
+
+<h2>Event</h2>
+<h3>Event creating</h3>
+<p>Creating event</p>
+
+//search event by user
+//update event
+//get events
+//subscribed events
+//sort events
+//delete event
+//filtrate event
