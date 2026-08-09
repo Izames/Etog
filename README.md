@@ -156,13 +156,107 @@
 </ul>
 
 <h2>Event</h2>
-<h3>Event creating</h3>
-<p>Creating event</p>
 
-//search event by user
-//update event
-//get events
-//subscribed events
-//sort events
-//delete event
-//filtrate event
+<h3>Create event</h3>
+<p>Create a new event.</p>
+<p>JWT: required</p>
+<ul>
+  <li>201 — event created</li>
+  <li>400 — validation error</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Get event</h3>
+<p>Get event data by id.</p>
+<p>JWT: not required</p>
+<ul>
+  <li>200 — returns event data</li>
+  <li>404 — event not found</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Get events</h3>
+<p>Get list of events with pagination.</p>
+<p>JWT: not required</p>
+<ul>
+  <li>200 — returns list of events</li>
+  <li>400 — validation error</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Search event by user</h3>
+<p>Get list of events created by a specific user.</p>
+<p>JWT: not required</p>
+<ul>
+  <li>200 — returns list of events</li>
+  <li>400 — validation error</li>
+  <li>404 — user not found</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Filter events</h3>
+<p>Get list of events filtered by parameters (category, date range, location, etc).</p>
+<p>JWT: not required</p>
+<ul>
+  <li>200 — returns filtered list of events</li>
+  <li>400 — validation error</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Sort events</h3>
+<p>Get list of events sorted by parameter (date, popularity, etc).</p>
+<p>JWT: not required</p>
+<ul>
+  <li>200 — returns sorted list of events</li>
+  <li>400 — validation error</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Subscribed events</h3>
+<p>Get list of events the current user is subscribed to.</p>
+<p>JWT: required</p>
+<ul>
+  <li>200 — returns list of events</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>join to event</h3>
+<p>Subscribe current user to an event.</p>
+<p>JWT: required</p>
+<ul>
+  <li>200 — subscribed</li>
+  <li>400 — validation error (e.g. already subscribed)</li>
+  <li>404 — event not found</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Unjoin from event</h3>
+<p>Unsubscribe current user from an event.</p>
+<p>JWT: required</p>
+<ul>
+  <li>200 — unsubscribed</li>
+  <li>400 — validation error (e.g. not subscribed)</li>
+  <li>404 — event not found</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Update event</h3>
+<p>Update event data. Only the creator can update the event.</p>
+<p>JWT: required</p>
+<ul>
+  <li>200 — event updated</li>
+  <li>400 — validation error</li>
+  <li>403 — not the event owner</li>
+  <li>404 — event not found</li>
+  <li>500 — server error</li>
+</ul>
+
+<h3>Delete event</h3>
+<p>Soft delete event. Only the creator can delete the event.</p>
+<p>JWT: required</p>
+<ul>
+  <li>200 — event deleted</li>
+  <li>403 — not the event owner</li>
+  <li>404 — event not found</li>
+  <li>500 — server error</li>
+</ul>
