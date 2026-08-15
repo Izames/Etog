@@ -343,3 +343,464 @@ delete sessions from all devices
 | 400 | `{"error": "validation error"}` | Validation error           |
 | 401 | `{"error": "Unauthorized}`      | Unauthorized              |
 | 500 | `{"error": "server error}`      |  Server error             |
+
+## Event
+
+---
+
+### Create event `[JWT]`
+
+`POST /event/create`
+
+Creates a new event. The authenticated user becomes the owner of the event.
+
+**Request body:**
+
+```json
+{
+  "name": "string",
+  "price": 0.00,
+  "address": "string",
+  "city": "string",
+  "latitude": 1.000000,
+  "longitude": 1.0000000,
+  "type": "string",
+  "date": "2026-08-13T18:30:00+03:00",
+  "description": "string",
+  "passed": "string",
+  "max_people": 10,
+  "media": "files",
+  "phone": "string",
+  "mail": "string",
+  "telegram": "string"
+}
+```
+**Responses:**
+
+| Code | Body                              | Description      |
+| ---- | --------------------------------- | ---------------- |
+| 201  |                    | Event created    |
+| 400  | `{ "error": "validation error" }` | Validation error |
+| 401  | `{ "error": "Unauthorized" }`     | Unauthorized     |
+| 500  | `{ "error": "server error" }`     | Server error     |
+
+---
+
+### Get event
+
+`GET /event/:id`
+
+Returns event data by event ID.
+
+**Responses:**
+
+| Code | Body                             | Description     |
+| ---- | -------------------------------- | --------------- |
+| 200  | `event object`                   | Success         |
+| 404  | `{ "error": "event not found" }` | Event not found |
+| 500  | `{ "error": "server error" }`    | Server error    |
+
+**Response body (200):**
+
+```json
+{
+  "id": 0,
+  "organizer": 0,
+  "organizer_name": "string",
+  "name": "string",
+  "description": "string",
+  "type": "string",
+  "date": "2026-08-20T18:00:00Z",
+  "latitude": 1.000000,
+  "longitude": 1.0000000,
+  "city": "string",
+  "address": "string",
+  "price": 1.0,
+  "passed": "string",
+  "max_people": 100,
+  "people": 0,
+  "media": ["string", "string"],
+  "phone": "string",
+  "mail": "string",
+  "telegram": "string"
+}
+```
+ ---
+
+### Get events
+
+`GET /event`
+
+Returns a paginated list of events.
+
+**Query parameters:**
+
+```text
+?page=1&limit=20
+```
+
+**Responses:**
+
+| Code | Body                              | Description                   |
+| ---- | --------------------------------- | ----------------------------- |
+| 200  | `event list`                      | Events returned               |
+| 400  | `{ "error": "validation error" }` | Invalid pagination parameters |
+| 500  | `{ "error": "server error" }`     | Server error                  |
+
+**Response body (200):**
+
+```json
+{
+  "events": [
+    {
+      "id": 0,
+      "organizer": 0,
+      "organizer_name": "string",
+      "name": "string",
+      "description": "string",
+      "type": "string",
+      "date": "2026-08-20T18:00:00Z",
+      "latitude": 1.000000,
+      "longitude": 1.0000000,
+      "city": "string",
+      "address": "string",
+      "price": 1.0,
+      "passed": "string",
+      "max_people": 100,
+      "people": 0,
+      "media": ["string", "string"],
+      "phone": "string",
+      "mail": "string",
+      "telegram": "string"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 0
+}
+```
+
+---
+
+### Search event by user
+
+`GET /event/user/:id`
+
+Returns a list of events created by the specified user.
+
+**Query parameters:**
+
+```text
+?page=1&limit=20
+```
+
+**Responses:**
+
+| Code | Body                              | Description        |
+| ---- | --------------------------------- | ------------------ |
+| 200  | `event list`                      | Events returned    |
+| 400  | `{ "error": "validation error" }` | Invalid parameters |
+| 404  | `{ "error": "user not found" }`   | User not found     |
+| 500  | `{ "error": "server error" }`     | Server error       |
+
+**Response body (200):**
+
+```json
+{
+  "events": [
+    {
+      "id": 0,
+      "organizer": 0,
+      "organizer_name": "string",
+      "name": "string",
+      "description": "string",
+      "type": "string",
+      "date": "2026-08-20T18:00:00Z",
+      "latitude": 1.000000,
+      "longitude": 1.0000000,
+      "city": "string",
+      "address": "string",
+      "price": 1.0,
+      "passed": "string",
+      "max_people": 100,
+      "people": 0,
+      "media": ["string", "string"],
+      "phone": "string",
+      "mail": "string",
+      "telegram": "string"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 0
+}
+```
+
+---
+
+### Filter events
+
+`GET /event/filter`
+
+Returns events filtered by the specified parameters.
+
+**Query parameters:**
+
+```text
+?category=string&date_from=2026-08-13T00:00:00Z&date_to=2026-08-20T23:59:59Z&location=string&page=1&limit=20
+```
+
+**Responses:**
+
+| Code | Body                              | Description               |
+| ---- | --------------------------------- | ------------------------- |
+| 200  | `event list`                      | Filtered events returned  |
+| 400  | `{ "error": "validation error" }` | Invalid filter parameters |
+| 500  | `{ "error": "server error" }`     | Server error              |
+
+**Response body (200):**
+
+```json
+{
+  "events": [
+    {
+      "id": 0,
+      "organizer": 0,
+      "organizer_name": "string",
+      "name": "string",
+      "description": "string",
+      "type": "string",
+      "date": "2026-08-20T18:00:00Z",
+      "latitude": 1.000000,
+      "longitude": 1.0000000,
+      "city": "string",
+      "address": "string",
+      "price": 1.0,
+      "passed": "string",
+      "max_people": 100,
+      "people": 0,
+      "media": ["string", "string"],
+      "phone": "string",
+      "mail": "string",
+      "telegram": "string"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 0
+}
+```
+
+---
+
+### Sort events
+
+`GET /event/sort`
+
+Returns events sorted by the specified parameter.
+
+**Query parameters:**
+
+```text
+?sort=date&order=asc&page=1&limit=20
+```
+
+**Available sort parameters:**
+
+* `date` — sort by event date
+
+**Available order parameters:**
+
+* `asc` — ascending
+* `desc` — descending
+
+**Responses:**
+
+| Code | Body                              | Description             |
+| ---- | --------------------------------- | ----------------------- |
+| 200  | `event list`                      | Sorted events returned  |
+| 400  | `{ "error": "validation error" }` | Invalid sort parameters |
+| 500  | `{ "error": "server error" }`     | Server error            |
+
+**Response body (200):**
+
+```json
+{
+  "events": [
+    {
+      "id": 0,
+      "organizer": 0,
+      "organizer_name": "string",
+      "name": "string",
+      "description": "string",
+      "type": "string",
+      "date": "2026-08-20T18:00:00Z",
+      "latitude": 1.000000,
+      "longitude": 1.0000000,
+      "city": "string",
+      "address": "string",
+      "price": 1.0,
+      "passed": "string",
+      "max_people": 100,
+      "people": 0,
+      "media": ["string", "string"],
+      "phone": "string",
+      "mail": "string",
+      "telegram": "string"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 0
+}
+```
+
+---
+
+### Subscribed events
+
+`GET /event/subscribed`
+
+Returns a list of events the authenticated user is subscribed to.
+
+**Query parameters:**
+
+```text
+?page=1&limit=20
+```
+
+**Responses:**
+
+| Code | Body                          | Description                |
+| ---- | ----------------------------- | -------------------------- |
+| 200  | `event list`                  | Subscribed events returned |
+| 401  | `{ "error": "Unauthorized" }` | Unauthorized               |
+| 500  | `{ "error": "server error" }` | Server error               |
+
+**Response body (200):**
+
+```json
+{
+  "events": [
+    {
+      "id": 0,
+      "organizer": 0,
+      "organizer_name": "string",
+      "name": "string",
+      "description": "string",
+      "type": "string",
+      "date": "2026-08-20T18:00:00Z",
+      "latitude": 1.000000,
+      "longitude": 1.0000000,
+      "city": "string",
+      "address": "string",
+      "price": 1.0,
+      "passed": "string",
+      "max_people": 100,
+      "people": 0,
+      "media": ["string", "string"],
+      "phone": "string",
+      "mail": "string",
+      "telegram": "string"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 0
+}
+```
+
+---
+
+### Join event
+
+`POST /event/join/:id`
+
+Subscribes the authenticated user to an event.
+
+**Responses:**
+
+| Code | Body                                | Description                |
+| ---- | ----------------------------------- | -------------------------- |
+| 200  | `{}`                                | Subscribed                 |
+| 400  | `{ "error": "already subscribed" }` | User is already subscribed |
+| 401  | `{ "error": "Unauthorized" }`       | Unauthorized               |
+| 404  | `{ "error": "event not found" }`    | Event not found            |
+| 500  | `{ "error": "server error" }`       | Server error               |
+
+---
+
+### Unjoin event
+
+`POST /event/unjoin/:id`
+
+Unsubscribes the authenticated user from an event.
+
+**Responses:**
+
+| Code | Body                             | Description            |
+| ---- | -------------------------------- | ---------------------- |
+| 200  | `{}`                             | Unsubscribed           |
+| 400  | `{ "error": "not subscribed" }`  | User is not subscribed |
+| 401  | `{ "error": "Unauthorized" }`    | Unauthorized           |
+| 404  | `{ "error": "event not found" }` | Event not found        |
+| 500  | `{ "error": "server error" }`    | Server error           |
+
+---
+
+### Update event
+
+`POST /event/changeData/:id`
+
+Updates event data. Only the event creator can update the event.
+
+**Request body** (all fields optional):
+
+```json
+{
+  "name": "string",
+  "price": 0.00,
+  "address": "string",
+  "city": "string",
+  "latitude": 1.000000,
+  "longitude": 1.0000000,
+  "type": "string",
+  "date": "2026-08-13T18:30:00+03:00",
+  "description": "string",
+  "passed": "string",
+  "max_people": 10,
+  "media": "files",
+  "phone": "string",
+  "mail": "string",
+  "telegram": "string"
+}
+```
+
+**Responses:**
+
+| Code | Body                              | Description                 |
+| ---- | --------------------------------- | --------------------------- |
+| 200  | `{}`                              | Event updated               |
+| 400  | `{ "error": "validation error" }` | Validation error            |
+| 401  | `{ "error": "Unauthorized" }`     | Unauthorized                |
+| 403  | `{ "error": "not event owner" }`  | User is not the event owner |
+| 404  | `{ "error": "event not found" }`  | Event not found             |
+| 500  | `{ "error": "server error" }`     | Server error                |
+
+---
+
+### Delete event
+
+`DELETE /event/:id`
+
+Soft deletes an event. Only the event creator can delete the event.
+
+**Responses:**
+
+| Code | Body                             | Description                 |
+| ---- | -------------------------------- | --------------------------- |
+| 200  | `{}`                             | Event deleted               |
+| 401  | `{ "error": "Unauthorized" }`    | Unauthorized                |
+| 403  | `{ "error": "not event owner" }` | User is not the event owner |
+| 404  | `{ "error": "event not found" }` | Event not found             |
+| 500  | `{ "error": "server error" }`    | Server error                |
