@@ -43,6 +43,9 @@ func main() {
 	accountHandler := handlers.NewAccountHandler(log, authService)
 	mockHandler := handlers.NewMockEventHandler(log, database)
 
+	eventService := services.NewEventService(log, database, s3)
+	eventHandler := handlers.NewEventHandler(log, eventService, conf)
+
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -56,6 +59,7 @@ func main() {
 
 	rMockEv := router.Group("/event")
 	rAccount := router.Group("/account")
+	rEvent := router.Group("/event")
 
 	rMockEv.POST("/add", mockHandler.CreateMockEvent)
 	rMockEv.GET("/get/:id", mockHandler.GetMockEvent)
@@ -79,6 +83,8 @@ func main() {
 	rAccount.POST("/unfollow/:int", accountHandler.Unsubscribe)
 	rAccount.POST("/requestverification", accountHandler.RequestOfficial)
 	rAccount.DELETE("/deletesessions", accountHandler.DeleteSessions)
+
+	rEvent.POST("/create", eventHandler.CreateEvent)
 
 	server := &http.Server{
 		Addr:           fmt.Sprintf(":%s", conf.Port),

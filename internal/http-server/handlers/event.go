@@ -1,138 +1,90 @@
 package handlers
 
 import (
-	"Etog/internal/domain/entity"
+	"Etog/internal/config"
+	"Etog/internal/domain/entity/DTO/event_dto"
+	"context"
 	"log/slog"
-	"net/http"
+	"mime/multipart"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
-type MockEventHandler struct {
+type EventHandler struct {
 	log     *slog.Logger
-	service MockEventService
+	service EventService
+	config  config.Config
 }
 
-type MockEventService interface {
-	CreateMockEvent(mockEvent entity.MockEvent) error
-	GetMockEvent(id int) (*entity.MockEvent, error)
-	GetMockEvents() (*[]entity.MockEvent, error)
-	UpdateMockEvent(id int, newMockEvent map[string]interface{}) (*entity.MockEvent, error)
-	DeleteMockEvent(id int) error
+type EventService interface {
+	CreateEvent(ctx context.Context, event *event_dto.EventAdd, files []*multipart.FileHeader, creatorId int) (int, error)
+	GetEventById(ctx context.Context, eventId int) (*event_dto.EventAdd, int, error)
+	GetListOfEvents(ctx context.Context, page int, limit int) ([]*event_dto.EventAdd, int, error)
 }
 
-func NewMockEventHandler(log *slog.Logger, service MockEventService) *MockEventHandler {
-	return &MockEventHandler{
+func NewEventHandler(log *slog.Logger, service EventService, conf config.Config) *EventHandler {
+	log.Info("New Event Handler Run Successfully")
+	return &EventHandler{
 		log:     log,
 		service: service,
+		config:  conf,
 	}
 }
 
-func (s *MockEventHandler) CreateMockEvent(ctx *gin.Context) {
-	const op = "handlers.MockEvent.CreateMockEvent"
-	var mockEvent entity.MockEvent
-	s.log.With(slog.String("op", op))
-
-	s.log.Debug("Create Mock Event Attempt")
-
-	if err := ctx.ShouldBindJSON(&mockEvent); err != nil {
-		s.log.Error("Failed to parse request body")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "при создании были указаны неверные данные"})
+func (eh *EventHandler) CreateEvent(ctx *gin.Context) {
+	var event event_dto.EventAdd
+	if err := ctx.ShouldBind(&event); err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	if err := s.service.CreateMockEvent(mockEvent); err != nil {
-		s.log.Error("Failed in database to create Mock Event")
-		ctx.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "произошла серверная ошибка"})
+	form, err := ctx.MultipartForm()
+	if err != nil {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	s.log.Info("Create Mock Event Success")
-	ctx.JSON(http.StatusCreated, gin.H{"message": "SUCCESSFULLY"})
+	files := form.File["media"]
+	userId := ctx.GetInt("userId")
+	code, err := eh.service.CreateEvent(ctx, &event, files, userId)
+	if err != nil {
+		ctx.JSON(code, gin.H{"error": err.Error()})
+	}
+	ctx.JSON(200, gin.H{})
 }
 
-func (s *MockEventHandler) GetMockEvent(ctx *gin.Context) {
-	var mockEvent *entity.MockEvent
-	const op = "handlers.MockEvent.GetMockEvent"
-	s.log.With(slog.String("op", op))
-
-	s.log.Debug("Get Mock Event Attempt")
-
+func (eh *EventHandler) GetEvent(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		s.log.Error("Failed to parse id: ", ctx.Param("id"))
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "некорректный идентификатор мероприятия"})
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	mockEvent, err = s.service.GetMockEvent(id)
+	event, code, err := eh.service.GetEventById(ctx, id)
 	if err != nil {
-		s.log.Error("Failed in database to get Mock Event")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "не удалось найти мероприятие"})
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
 	}
-
-	s.log.Info("Get Mock Event Success")
-	ctx.JSON(http.StatusOK, gin.H{"mock-event": mockEvent})
+	ctx.JSON(200, event)
 }
 
-func (s *MockEventHandler) GetMockEvents(ctx *gin.Context) {
-	var mockEvents *[]entity.MockEvent
-	const op = "handlers.MockEvent.GetMockEvents"
-	s.log.With(slog.String("op", op))
-
-	s.log.Debug("Get Mock Event Attempt")
-
-	mockEvents, err := s.service.GetMockEvents()
+func (eh *EventHandler) GetListOfEvents(ctx *gin.Context) {
+	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	if err != nil {
-		s.log.Error("Failed in database to get Mock Events")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "не удалось найти никаких мероприятий"})
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	s.log.Info("Get Mock Event Success")
-	ctx.JSON(http.StatusOK, gin.H{"mock-events": mockEvents})
-}
-
-func (s *MockEventHandler) UpdateMockEvent(ctx *gin.Context) {
-	const op = "handlers.MockEvent.UpdateMockEvent"
-	mockEvent := make(map[string]interface{})
-	var newMockEvent *entity.MockEvent
-	s.log.With(slog.String("op", op))
-
-	s.log.Debug("Update Mock Event Attempt")
-
-	id, err := strconv.Atoi(ctx.Param("id"))
+	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 	if err != nil {
-		s.log.Error("Failed to parse id: ", ctx.Param("id"))
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "неверный формат идентификатора мероприятия"})
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	if err := ctx.ShouldBindJSON(&mockEvent); err != nil {
-		s.log.Error("Failed to parse request body")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "не удалось обновить мероприятие"})
+	if limit > 50 || limit < 1 {
+		ctx.JSON(400, gin.H{"error": "validation error"})
+		return
 	}
-
-	newMockEvent, err = s.service.UpdateMockEvent(id, mockEvent)
+	events, code, err := eh.service.GetListOfEvents(ctx, page, limit)
 	if err != nil {
-		s.log.Error("Failed in database to update Mock Event")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "не удалось обновить мероприятие"})
+		ctx.JSON(code, gin.H{"error": err.Error()})
+		return
 	}
-	s.log.Info("Update Mock Event Success")
-	ctx.JSON(http.StatusOK, gin.H{"new-mock-event": newMockEvent})
-}
-
-func (s *MockEventHandler) DeleteMockEvent(ctx *gin.Context) {
-	const op = "handlers.MockEvent.DeleteMockEvent"
-	s.log.With(slog.String("op", op))
-
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		s.log.Error("Failed to parse id: ", ctx.Param("id"))
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "неверный формат идентификатора мероприятия"})
-	}
-
-	if err := s.service.DeleteMockEvent(id); err != nil {
-		s.log.Error("Failed in database to delete Mock Event")
-		ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "не удалось удалить мероприятие"})
-	}
-	s.log.Info("Delete Mock Event Success")
-
-	ctx.JSON(http.StatusOK, gin.H{"message": "SUCCESSFULLY"})
+	ctx.JSON(200, events)
 }

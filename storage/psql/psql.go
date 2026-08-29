@@ -263,3 +263,29 @@ func (s *Storage) Unsubscribe(ctx context.Context, id, follower int) (int, error
 	}
 	return 200, nil
 }
+
+// Event Section
+
+func (s *Storage) AddEvent(ctx context.Context, event *entity.Event, contact *entity.Contact) error {
+	const op = "psql.AddEvent"
+	log := s.log.With(slog.String("op", op))
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(contact).Error; err != nil {
+			log.Error(op+": ", err)
+			return errors.New("server error")
+		}
+		event.Contact = contact.Id
+
+		if err := tx.Create(event).Error; err != nil {
+			log.Error(op+": ", err)
+			return errors.New("server error")
+		}
+		return nil
+	})
+	if err != nil {
+		log.Error(op+": ", err)
+		return errors.New("server error")
+	}
+
+	return nil
+}
