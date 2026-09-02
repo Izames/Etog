@@ -436,8 +436,25 @@ Returns a paginated list of events.
 **Query parameters:**
 
 ```text
-?page=1&limit=20
+?page=1
+&limit=20
+&user_id=123
+&type=concert
+&city=Chelyabinsk
+&sort=date
+&order=asc
+&subscribed_only=true
 ```
+
+**Available sort parameters:**
+
+* `date` — sort by event date
+
+**Available order parameters:**
+
+* `asc` — ascending
+* `desc` — descending
+
 
 **Responses:**
 
@@ -473,240 +490,7 @@ Returns a paginated list of events.
       "mail": "string",
       "telegram": "string"
     }
-  ],
-  "page": 1,
-  "limit": 20,
-  "total": 0
-}
-```
-
----
-
-### Search event by user
-
-`GET /event/user/:id`
-
-Returns a list of events created by the specified user.
-
-**Query parameters:**
-
-```text
-?page=1&limit=20
-```
-
-**Responses:**
-
-| Code | Body                              | Description        |
-| ---- | --------------------------------- | ------------------ |
-| 200  | `event list`                      | Events returned    |
-| 400  | `{ "error": "validation error" }` | Invalid parameters |
-| 404  | `{ "error": "user not found" }`   | User not found     |
-| 500  | `{ "error": "server error" }`     | Server error       |
-
-**Response body (200):**
-
-```json
-{
-  "events": [
-    {
-      "id": 0,
-      "organizer": 0,
-      "organizer_name": "string",
-      "name": "string",
-      "description": "string",
-      "type": "string",
-      "date": "2026-08-20T18:00:00Z",
-      "latitude": 1.000000,
-      "longitude": 1.0000000,
-      "city": "string",
-      "address": "string",
-      "price": 1.0,
-      "passed": "string",
-      "max_people": 100,
-      "people": 0,
-      "media": ["string", "string"],
-      "phone": "string",
-      "mail": "string",
-      "telegram": "string"
-    }
-  ],
-  "page": 1,
-  "limit": 20,
-  "total": 0
-}
-```
-
----
-
-### Filter events
-
-`GET /event/filter`
-
-Returns events filtered by the specified parameters.
-
-**Query parameters:**
-
-```text
-?category=string&date_from=2026-08-13T00:00:00Z&date_to=2026-08-20T23:59:59Z&location=string&page=1&limit=20
-```
-
-**Responses:**
-
-| Code | Body                              | Description               |
-| ---- | --------------------------------- | ------------------------- |
-| 200  | `event list`                      | Filtered events returned  |
-| 400  | `{ "error": "validation error" }` | Invalid filter parameters |
-| 500  | `{ "error": "server error" }`     | Server error              |
-
-**Response body (200):**
-
-```json
-{
-  "events": [
-    {
-      "id": 0,
-      "organizer": 0,
-      "organizer_name": "string",
-      "name": "string",
-      "description": "string",
-      "type": "string",
-      "date": "2026-08-20T18:00:00Z",
-      "latitude": 1.000000,
-      "longitude": 1.0000000,
-      "city": "string",
-      "address": "string",
-      "price": 1.0,
-      "passed": "string",
-      "max_people": 100,
-      "people": 0,
-      "media": ["string", "string"],
-      "phone": "string",
-      "mail": "string",
-      "telegram": "string"
-    }
-  ],
-  "page": 1,
-  "limit": 20,
-  "total": 0
-}
-```
-
----
-
-### Sort events
-
-`GET /event/sort`
-
-Returns events sorted by the specified parameter.
-
-**Query parameters:**
-
-```text
-?sort=date&order=asc&page=1&limit=20
-```
-
-**Available sort parameters:**
-
-* `date` — sort by event date
-
-**Available order parameters:**
-
-* `asc` — ascending
-* `desc` — descending
-
-**Responses:**
-
-| Code | Body                              | Description             |
-| ---- | --------------------------------- | ----------------------- |
-| 200  | `event list`                      | Sorted events returned  |
-| 400  | `{ "error": "validation error" }` | Invalid sort parameters |
-| 500  | `{ "error": "server error" }`     | Server error            |
-
-**Response body (200):**
-
-```json
-{
-  "events": [
-    {
-      "id": 0,
-      "organizer": 0,
-      "organizer_name": "string",
-      "name": "string",
-      "description": "string",
-      "type": "string",
-      "date": "2026-08-20T18:00:00Z",
-      "latitude": 1.000000,
-      "longitude": 1.0000000,
-      "city": "string",
-      "address": "string",
-      "price": 1.0,
-      "passed": "string",
-      "max_people": 100,
-      "people": 0,
-      "media": ["string", "string"],
-      "phone": "string",
-      "mail": "string",
-      "telegram": "string"
-    }
-  ],
-  "page": 1,
-  "limit": 20,
-  "total": 0
-}
-```
-
----
-
-### Subscribed events
-
-`GET /event/subscribed`
-
-Returns a list of events the authenticated user is subscribed to.
-
-**Query parameters:**
-
-```text
-?page=1&limit=20
-```
-
-**Responses:**
-
-| Code | Body                          | Description                |
-| ---- | ----------------------------- | -------------------------- |
-| 200  | `event list`                  | Subscribed events returned |
-| 401  | `{ "error": "Unauthorized" }` | Unauthorized               |
-| 500  | `{ "error": "server error" }` | Server error               |
-
-**Response body (200):**
-
-```json
-{
-  "events": [
-    {
-      "id": 0,
-      "organizer": 0,
-      "organizer_name": "string",
-      "name": "string",
-      "description": "string",
-      "type": "string",
-      "date": "2026-08-20T18:00:00Z",
-      "latitude": 1.000000,
-      "longitude": 1.0000000,
-      "city": "string",
-      "address": "string",
-      "price": 1.0,
-      "passed": "string",
-      "max_people": 100,
-      "people": 0,
-      "media": ["string", "string"],
-      "phone": "string",
-      "mail": "string",
-      "telegram": "string"
-    }
-  ],
-  "page": 1,
-  "limit": 20,
-  "total": 0
+  ]
 }
 ```
 
