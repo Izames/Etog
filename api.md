@@ -490,7 +490,13 @@ Returns a paginated list of events.
       "mail": "string",
       "telegram": "string"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "pages": 8
+  }
 }
 ```
 

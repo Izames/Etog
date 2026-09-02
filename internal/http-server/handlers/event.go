@@ -20,11 +20,9 @@ type EventHandler struct {
 type EventService interface {
 	CreateEvent(ctx context.Context, event *event_dto.EventAdd, files []*multipart.FileHeader, creatorId int) (int, error)
 	GetEventById(ctx context.Context, eventId int) (*event_dto.EventResponse, int, error)
-	GetListOfEvents(ctx context.Context, page int, limit int) (*[]event_dto.EventResponse, int, error)
-	GetEventsByUserId(ctx context.Context, userId, page, limit int) (*[]event_dto.EventAdd, int, error)
+	GetListOfEvents(ctx context.Context, page int, limit int, userId int, evType string,
+		city string, sort string, order string, subscribedOnly string) (*[]event_dto.EventResponse, int, error)
 }
-?category=string&city=string&page=1&limit=20&price_min=1&price_max=1
-
 
 func NewEventHandler(log *slog.Logger, service EventService, conf config.Config) *EventHandler {
 	log.Info("New Event Handler Run Successfully")
@@ -84,36 +82,17 @@ func (eh *EventHandler) GetListOfEvents(ctx *gin.Context) {
 		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	events, code, err := eh.service.GetListOfEvents(ctx, page, limit)
-	if err != nil {
-		ctx.JSON(code, gin.H{"error": err.Error()})
-		return
-	}
-	ctx.JSON(200, events)
-}
-
-func (eh *EventHandler) GetEventsByUserId(ctx *gin.Context) {
-	page, err := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	userId, err := strconv.Atoi(ctx.DefaultQuery("userId", "0"))
 	if err != nil {
 		ctx.JSON(400, gin.H{"error": "validation error"})
 		return
 	}
-	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
-	if err != nil {
-		ctx.JSON(400, gin.H{"error": "validation error"})
-		return
-	}
-	if limit > 50 || limit < 1 {
-		ctx.JSON(400, gin.H{"error": "validation error"})
-		return
-	}
-	userIdStr := ctx.Param("userId")
-	userId, err := strconv.Atoi(userIdStr)
-	if err != nil {
-		ctx.JSON(400, gin.H{"error": "validation error"})
-		return
-	}
-	events, code, err := eh.service.GetEventsByUserId(ctx, userId, page, limit)
+	evType := ctx.DefaultQuery("type", "")
+	city := ctx.DefaultQuery("city", "")
+	sort := ctx.DefaultQuery("sort", "")
+	order := ctx.DefaultQuery("order", "")
+	subscribedOnly := ctx.DefaultQuery("subscribed_only", "false")
+	events, code, err := eh.service.GetListOfEvents(ctx, page, limit, userId, evType, city, sort, order, subscribedOnly)
 	if err != nil {
 		ctx.JSON(code, gin.H{"error": err.Error()})
 		return
